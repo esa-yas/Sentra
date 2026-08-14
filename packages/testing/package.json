@@ -1,0 +1,18 @@
+{
+  "name": "@sentra/testing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-memory fakes for every port, shared port contract suites, and synthetic fixtures.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@sentra/contracts": "workspace:*",
+    "@sentra/ports": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.2"
+  }
+}

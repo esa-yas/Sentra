@@ -1,0 +1,20 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Native postinstall scripts are opt-in. A dependency may only execute one when it is
+# listed here, which stops a compromised transitive package from running code at
+# install time. Review every addition.
+allowBuilds:
+  # Prisma places its query and schema engine binaries during postinstall.
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
+  # Native accelerators for the queue and image pipelines.
+  msgpackr-extract: true
+  sharp: true
+  "@tailwindcss/oxide": true
+  unrs-resolver: true
+  # esbuild ships its platform binary as an optional dependency, so its postinstall
+  # script is redundant. Denied rather than merely unlisted, to keep installs green.
+  esbuild: false

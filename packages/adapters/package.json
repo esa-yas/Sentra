@@ -1,0 +1,26 @@
+{
+  "name": "@sentra/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infrastructure adapters implementing the ports. The only place provider SDKs may be imported.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^6.7.0",
+    "@sentra/config": "workspace:*",
+    "@sentra/contracts": "workspace:*",
+    "@sentra/core": "workspace:*",
+    "@sentra/db": "workspace:*",
+    "@sentra/observability": "workspace:*",
+    "@sentra/ports": "workspace:*",
+    "@sentry/node": "^9.15.0",
+    "bullmq": "^5.52.1",
+    "ioredis": "^5.6.1",
+    "jose": "^6.0.11",
+    "ulid": "^3.0.0"
+  }
+}

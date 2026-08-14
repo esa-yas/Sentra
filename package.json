@@ -1,0 +1,44 @@
+{
+  "name": "sentra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sentra — Real-Time Scam Prevention Network. Privacy-first correlation of consented telecom scam-risk signals with bank payment intents.",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "build:clean": "tsc --build tsconfig.build.json --clean",
+    "typecheck": "tsc --build tsconfig.build.json --force",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "boundaries": "depcruise --config .dependency-cruiser.cjs packages apps",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest --project unit",
+    "db:generate": "pnpm --filter @sentra/db run generate",
+    "db:migrate": "pnpm --filter @sentra/db run migrate",
+    "db:deploy": "pnpm --filter @sentra/db run deploy",
+    "db:seed": "pnpm --filter @sentra/db run seed",
+    "db:reset": "pnpm --filter @sentra/db run reset",
+    "dev:infra": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
+    "dev:infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
+    "dev:api": "pnpm --filter @sentra/api run dev",
+    "dev:worker": "pnpm --filter @sentra/worker run dev",
+    "dev:web": "pnpm --filter @sentra/web run dev",
+    "verify": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm test:unit"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@types/node": "^22.15.3",
+    "@vitest/coverage-v8": "^3.1.2",
+    "dependency-cruiser": "^16.10.1",
+    "eslint": "^9.26.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.1",
+    "vitest": "^3.1.2"
+  }
+}

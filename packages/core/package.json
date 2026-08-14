@@ -1,0 +1,15 @@
+{
+  "name": "@sentra/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Application core: domain rules and use cases. Must not depend on any provider SDK.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@sentra/contracts": "workspace:*",
+    "@sentra/ports": "workspace:*"
+  }
+}

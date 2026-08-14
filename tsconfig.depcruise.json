@@ -1,0 +1,20 @@
+{
+  // Resolution config used only by dependency-cruiser.
+  //
+  // Workspace manifests point `main` at `dist/`, so before a build every cross-package
+  // import looks unresolvable and the boundary rules go quiet — exactly when they matter
+  // most. Mapping `@sentra/*` onto source lets the architecture rules run on a clean
+  // checkout, in a pre-commit hook, and in CI without waiting for a compile.
+  //
+  // This file is never used to emit anything. The real build relies on project references,
+  // which must keep resolving to declaration output for incremental correctness.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@sentra/*": ["packages/*/src"],
+      "@/*": ["apps/web/src/*"]
+    },
+    "noEmit": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@sentra/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BullMQ worker process: outbox publisher, domain event consumer, retention sweep.",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@sentra/adapters": "workspace:*",
+    "@sentra/config": "workspace:*",
+    "@sentra/contracts": "workspace:*",
+    "@sentra/core": "workspace:*",
+    "@sentra/db": "workspace:*",
+    "@sentra/observability": "workspace:*",
+    "@sentra/ports": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  }
+}

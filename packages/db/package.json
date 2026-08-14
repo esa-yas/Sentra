@@ -1,0 +1,27 @@
+{
+  "name": "@sentra/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma schema, migrations, seed, and client factory. PostgreSQL is the system of record.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "generate": "prisma generate",
+    "migrate": "node scripts/with-root-env.mjs prisma migrate dev",
+    "deploy": "node scripts/with-root-env.mjs prisma migrate deploy",
+    "status": "node scripts/with-root-env.mjs prisma migrate status",
+    "reset": "node scripts/with-root-env.mjs prisma migrate reset --force",
+    "seed": "node scripts/with-root-env.mjs tsx prisma/seed.ts",
+    "studio": "node scripts/with-root-env.mjs prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@sentra/config": "workspace:*",
+    "prisma": "^6.7.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "ulid": "^3.0.0"
+  }
+}

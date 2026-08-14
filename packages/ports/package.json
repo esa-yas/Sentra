@@ -1,0 +1,14 @@
+{
+  "name": "@sentra/ports",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider interfaces the application core depends on. Types only — never an implementation.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@sentra/contracts": "workspace:*"
+  }
+}

@@ -1,0 +1,61 @@
+name: sentra-dev
+
+# Local development and CI dependencies.
+#
+# The plan targets both a local stack and a Supabase staging project. This file is the
+# authoritative target for development and for the test suite, so correctness never
+# depends on a hosted service being reachable.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentra-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sentra
+      POSTGRES_PASSWORD: sentra
+      POSTGRES_DB: sentra
+      # Deterministic collation so ordering matches the managed instances.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      # Surfaces slow queries against the synchronous decision path budget.
+      - "-c"
+      - "log_min_duration_statement=200"
+      - "-c"
+      - "max_connections=200"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentra -d sentra"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentra-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "no"
+      # Redis holds queue and cache state only, never business truth (slide 045), so an
+      # eviction policy is safe and a lost key must never lose a domain event.
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+    driver: local

@@ -1,0 +1,1080 @@
+// Sentra — Real-Time Scam Prevention Network
+// Foundation schema (Milestone 1 / Version 1a).
+//
+// PostgreSQL is the system of record (slide 039). Redis and BullMQ carry transport and
+// cache state only and never hold business truth (slides 043 and 045).
+//
+// Conventions applied to every table in this file:
+//   * Identifiers are application-generated ULIDs, so rows sort by creation time and no
+//     provider-specific identity leaks into a domain key (slide 038).
+//   * Sensitive rows carry tenant ownership, purpose, provenance, a correlation ID, a
+//     schema version, and retention metadata, because those are the fields that make
+//     minimisation and deletion provable rather than aspirational (slide 075).
+//   * Money is never stored here. This schema holds protection sessions, evidence
+//     derivatives, decisions, and outcomes only (slide 025).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection used by the running application.
+  url       = env("DATABASE_URL")
+  // Direct connection required for migrations: Prisma takes an advisory lock and issues
+  // DDL, neither of which behaves correctly through a transaction-mode pooler.
+  directUrl = env("DATABASE_DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enumerations. Values mirror @sentra/contracts exactly so the Prisma adapter maps
+// between them without translation, while the core stays free of any Prisma import.
+// ---------------------------------------------------------------------------
+
+enum OrganizationType {
+  BANK
+  TELECOM
+  PLATFORM
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  ANALYST
+  AUDITOR
+  OPERATOR
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum Purpose {
+  PROTECT_PAYMENT
+  FRAUD_INVESTIGATION
+  SERVICE_OPERATION
+  AUDIT_COMPLIANCE
+  CONSENT_MANAGEMENT
+  PARTNER_ADMINISTRATION
+  ANALYTICS_AGGREGATE
+}
+
+enum PartnerConnectionKind {
+  BANK_API
+  TELECOM_EVENTS
+}
+
+enum PartnerConnectionStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum PartnerScope {
+  PAYMENT_INTENTS_WRITE
+  RISK_EVENTS_WRITE
+  RECOMMENDATIONS_READ
+  OUTCOMES_WRITE
+}
+
+enum SigningKeyStatus {
+  ACTIVE
+  RETIRED
+  REVOKED
+}
+
+enum ActorType {
+  USER
+  PARTNER
+  SYSTEM
+  JOB
+}
+
+enum AuditOutcome {
+  ALLOWED
+  DENIED
+  ERROR
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  DEAD_LETTER
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum RetentionAction {
+  DELETE
+  ANONYMIZE
+}
+
+enum RetentionPolicyStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum RetentionRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// A participant in the network: a bank, a telecom, or the platform operator itself.
+/// The type is not merely descriptive — it decides which legal lane the tenant sits in
+/// and therefore which scopes it may ever hold (slide 076).
+model Organization {
+  id              String             @id
+  slug            String             @unique
+  legalName       String
+  type            OrganizationType
+  status          OrganizationStatus @default(ACTIVE)
+  /// ISO 3166-1 alpha-2. Drives consent policy and retention defaults.
+  jurisdiction    String             @db.Char(2)
+  /// Where this tenant's data must remain. Recorded from day one so a residency
+  /// requirement never forces a retrospective migration (slide 049).
+  dataResidency   String             @db.Char(2)
+  /// ISO 4217, used when rendering amounts in the console.
+  defaultCurrency String             @db.Char(3)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  /// Principal that created the tenant. Null for the seeded platform organization.
+  createdBy     String?
+  /// How this record came to exist, for example `seed` or `console`.
+  source        String
+  schemaVersion Int      @default(1)
+  correlationId String?
+
+  members            OrganizationMember[]
+  partnerConnections PartnerConnection[]
+  auditEvents        AuditEvent[]
+  outboxEvents       OutboxEvent[]
+  idempotencyKeys    IdempotencyKey[]
+  retentionPolicies  RetentionPolicy[]
+
+  // Domain aggregates (Version 1a decisioning). Every tenant-owned record below is scoped
+  // to exactly one organization, which is what makes cross-tenant isolation enforceable.
+  consentRecords    ConsentRecord[]
+  telecomRiskEvents TelecomRiskEvent[]
+  paymentIntents    PaymentIntent[]
+  correlationCases  CorrelationCase[]
+  riskAssessments   RiskAssessment[]
+  recommendations   Recommendation[]
+  bankOutcomes      BankOutcome[]
+  notifications     NotificationRecord[]
+  operationalEvents OperationalEvent[]
+
+  @@index([type, status])
+  @@map("organizations")
+}
+
+/// Platform-owned principal. Deliberately thin: customer identity stays with the bank
+/// (slide 041), so this table describes console operators, not protected customers.
+model User {
+  id           String     @id
+  primaryEmail String     @unique
+  displayName  String
+  status       UserStatus @default(ACTIVE)
+  mfaEnabled   Boolean    @default(false)
+  lastSeenAt   DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  source        String
+  schemaVersion Int      @default(1)
+
+  identityLinks IdentityLink[]
+  memberships   OrganizationMember[]
+
+  @@map("users")
+}
+
+/// Maps an external identity provider subject onto a platform principal.
+///
+/// Slide 053 requires application principal IDs to stay stable across issuers, so adding
+/// bank SSO later means inserting a row here rather than migrating user identifiers.
+model IdentityLink {
+  id      String @id
+  userId  String
+  /// Token issuer, for example the Supabase project's auth URL.
+  issuer  String
+  /// Subject claim as presented by that issuer.
+  subject String
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issuer, subject])
+  @@index([userId])
+  @@map("identity_links")
+}
+
+/// A person's role inside one tenant. Membership is the only thing that grants a user
+/// access to a tenant's data; there is no global administrator shortcut.
+model OrganizationMember {
+  id             String       @id
+  organizationId String
+  userId         String
+  role           MemberRole
+  status         MemberStatus @default(INVITED)
+  invitedBy      String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  activatedAt DateTime?
+  removedAt   DateTime?
+
+  schemaVersion Int     @default(1)
+  correlationId String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, status])
+  @@index([organizationId, status])
+  @@map("organization_members")
+}
+
+// ---------------------------------------------------------------------------
+// Partner integrations
+// ---------------------------------------------------------------------------
+
+/// Machine credentials for a partner integration.
+///
+/// The secret is stored only as an Argon2id hash, so a lost secret is rotated rather than
+/// recovered. Scopes and purposes are held per connection so a single partner can run a
+/// narrow production credential alongside a broader sandbox one.
+model PartnerConnection {
+  id               String                  @id
+  organizationId   String
+  name             String
+  kind             PartnerConnectionKind
+  clientId         String                  @unique
+  clientSecretHash String
+  scopes           PartnerScope[]
+  allowedPurposes  Purpose[]
+  /// Empty means no network restriction is configured for this connection.
+  ipAllowlist      String[]                @default([])
+  tokenTtlSeconds  Int                     @default(300)
+  status           PartnerConnectionStatus @default(ACTIVE)
+
+  lastRotatedAt DateTime?
+  /// When the credential should next be rotated, surfaced in the console.
+  rotationDueAt DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String?
+  source        String
+  schemaVersion Int      @default(1)
+  correlationId String?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signingKeys  PartnerSigningKey[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+  @@map("partner_connections")
+}
+
+/// Public keys a partner signs risk events with.
+///
+/// Slide 013 requires signature, replay window, and tenant to be checked before ingest.
+/// The validity window here is what makes key rotation auditable: an event signed by a
+/// key outside its window is rejected even though the signature itself verifies.
+model PartnerSigningKey {
+  id                  String           @id
+  partnerConnectionId String
+  kid                 String
+  algorithm           String
+  /// Public JWK only. A private component is rejected at the API boundary.
+  publicKeyJwk        Json
+  status              SigningKeyStatus @default(ACTIVE)
+  notBefore           DateTime         @default(now())
+  notAfter            DateTime?
+
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime?
+  createdBy     String?
+  schemaVersion Int       @default(1)
+  correlationId String?
+
+  partnerConnection PartnerConnection @relation(fields: [partnerConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerConnectionId, kid])
+  @@index([partnerConnectionId, status])
+  @@map("partner_signing_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+/// Append-only audit record, hash-chained per tenant.
+///
+/// Slide 021 asks for one traceable decision timeline and slide 074 for append-only audit
+/// evidence. Each row commits inside the same transaction as the change it describes, and
+/// `hashSelf` covers `hashPrev` plus the canonical form of this row, so deleting or
+/// editing a record breaks verification at that point rather than passing unnoticed.
+model AuditEvent {
+  id String @id
+
+  /// Chain namespace: the owning organization, or a platform sentinel for tenant-less
+  /// events such as onboarding the first organization. One monotonic sequence per key.
+  chainKey String
+  sequence BigInt
+
+  organizationId String?
+
+  actorType  ActorType
+  actorId    String?
+  /// Readable actor label for the timeline. Must never contain personal data.
+  actorLabel String?
+
+  action       String
+  resourceType String
+  resourceId   String?
+
+  purpose Purpose
+  outcome AuditOutcome @default(ALLOWED)
+
+  correlationId String
+  requestId     String?
+  /// Salted digests. Slide 021 requires masked identifiers, so the raw address and agent
+  /// are never stored while remaining correlatable across records.
+  ipHash        String?
+  userAgentHash String?
+
+  /// Redacted before persistence. Present only for state transitions worth diffing.
+  dataBefore Json?
+  dataAfter  Json?
+  metadata   Json?
+
+  occurredAt DateTime
+  recordedAt DateTime @default(now())
+
+  hashPrev String
+  hashSelf String
+
+  schemaVersion     Int       @default(1)
+  retentionPolicyId String?
+  expiresAt         DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([chainKey, sequence])
+  @@unique([hashSelf])
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@index([correlationId])
+  @@index([resourceType, resourceId])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// Durable eventing
+// ---------------------------------------------------------------------------
+
+/// Transactional outbox (slide 034).
+///
+/// A domain change and its outbox row commit together, so an event cannot be lost because
+/// a queue was briefly unavailable. Publication is at-least-once; consumers deduplicate
+/// through `inbox_events`.
+model OutboxEvent {
+  id             String  @id
+  organizationId String?
+
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  schemaVersion Int    @default(1)
+  /// Minimised payload. An event names what changed and where to read it rather than
+  /// copying evidence into a transport where purpose and retention do not apply.
+  payload       Json
+
+  correlationId String
+
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  maxAttempts Int          @default(8)
+  /// Next time this row may be claimed. Backoff moves it forward.
+  availableAt DateTime     @default(now())
+  claimedAt   DateTime?
+  /// Identifies the worker that holds the claim, so a crashed claim can be reclaimed.
+  claimToken  String?
+  publishedAt DateTime?
+  lastError   String?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([correlationId])
+  @@map("outbox_events")
+}
+
+/// Consumer-side deduplication. Slide 034 says to assume duplicates and design for
+/// replay: a handler records the external identifier it has processed, which makes
+/// at-least-once delivery safe without making every handler individually clever.
+model InboxEvent {
+  id String @id
+
+  /// Logical consumer, for example `worker.domain-events`.
+  source     String
+  externalId String
+  eventType  String
+
+  correlationId String?
+  processedAt   DateTime  @default(now())
+  expiresAt     DateTime?
+
+  @@unique([source, externalId])
+  @@index([expiresAt])
+  @@map("inbox_events")
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency
+// ---------------------------------------------------------------------------
+
+/// Stored responses for replayed partner requests.
+///
+/// A payment intent may legitimately be retried after a network timeout. Replaying the
+/// stored response keeps the bank's at-most-once expectation intact, while a key reused
+/// with a different body is refused rather than silently answered from cache.
+model IdempotencyKey {
+  id             String @id
+  organizationId String
+  /// Route scope, so the same key may be reused across unrelated endpoints.
+  scope          String
+  key            String
+
+  /// Digest of the canonical request, used to detect a reused key with a changed body.
+  requestHash String
+
+  status         IdempotencyStatus @default(IN_PROGRESS)
+  responseStatus Int?
+  responseBody   Json?
+  responseHash   String?
+
+  correlationId String
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  expiresAt     DateTime
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+/// How long a class of record may be kept, and what happens when that expires.
+///
+/// Slide 075 requires retention to be an executable control rather than a policy
+/// document. A null organization makes the policy a platform-wide default; a tenant row
+/// with the same resource and purpose overrides it.
+model RetentionPolicy {
+  id             String  @id
+  organizationId String?
+
+  resourceType     String
+  purpose          Purpose
+  retentionSeconds Int
+  action           RetentionAction
+  /// The lawful basis for holding the data this long. Recorded for the DPIA.
+  legalBasis       String
+
+  version       Int                   @default(1)
+  status        RetentionPolicyStatus @default(ACTIVE)
+  effectiveFrom DateTime              @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+
+  organization Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  runs         RetentionRun[]
+
+  @@unique([organizationId, resourceType, purpose, version])
+  @@index([status, resourceType])
+  @@map("retention_policies")
+}
+
+/// Evidence that a retention policy actually ran.
+///
+/// `proofHash` digests the run's result so an auditor can confirm the deletion happened
+/// without being granted access to what was deleted.
+model RetentionRun {
+  id                String             @id
+  retentionPolicyId String
+  status            RetentionRunStatus @default(RUNNING)
+
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  recordsAffected Int       @default(0)
+  proofHash       String?
+  error           String?
+
+  correlationId String
+
+  retentionPolicy RetentionPolicy @relation(fields: [retentionPolicyId], references: [id], onDelete: Cascade)
+
+  @@index([retentionPolicyId, startedAt(sort: Desc)])
+  @@map("retention_runs")
+}
+
+// ---------------------------------------------------------------------------
+// Domain decisioning enumerations. Values mirror @sentra/contracts exactly (decision.ts /
+// operations.ts) so the Prisma adapter maps without translation and the core never imports
+// Prisma. Native PostgreSQL enums are used deliberately: they are standard SQL and migrate
+// to Cloud SQL unchanged, unlike a Supabase-specific type would.
+// ---------------------------------------------------------------------------
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationAction {
+  ALLOW
+  WARN
+  REQUIRE_CALLBACK
+  REQUIRE_ANALYST_REVIEW
+  DELAY
+  BLOCK_RECOMMENDED
+}
+
+/// Availability of an evidence source for one evaluation. `UNAVAILABLE` and `NO_CONSENT`
+/// must never be read as "no risk" (slide 035); keeping them distinct at the type level is
+/// what prevents missing data from silently becoming a zero-risk allow.
+enum EvidenceAvailability {
+  OK
+  OK_NO_SIGNALS
+  NO_CONSENT
+  UNAVAILABLE
+}
+
+enum CallerReputation {
+  UNKNOWN
+  TRUSTED
+  SUSPECT
+  KNOWN_BAD
+}
+
+enum IdentityVerificationResult {
+  PASS
+  FAIL
+  NOT_CHECKED
+}
+
+enum ConsentStatus {
+  GRANTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum CaseStatus {
+  OPEN
+  RECOMMENDED
+  AWAITING_OUTCOME
+  RESOLVED
+}
+
+/// The bank's own action. Every value is the bank exercising final authority (slides 010,
+/// 030); the network only ever *recommended*.
+enum BankDecision {
+  ALLOWED
+  DELAYED
+  BLOCKED
+  CALLBACK_REQUESTED
+  UNDER_REVIEW
+}
+
+/// Ground-truth classification, learned after the fact. `PENDING` until the bank reports
+/// back; there is no feedback loop in Version 1a, so seeded values are clearly synthetic.
+enum OutcomeClassification {
+  PENDING
+  CONFIRMED_SCAM
+  FALSE_POSITIVE
+  LEGITIMATE
+  UNKNOWN
+}
+
+enum NotificationChannel {
+  SMS
+  PUSH
+  EMAIL
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  SUPPRESSED_DUPLICATE
+}
+
+enum EventSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OperationalEventStatus {
+  RECEIVED
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
+}
+
+// ---------------------------------------------------------------------------
+// Consent
+// ---------------------------------------------------------------------------
+
+/// A customer's consent for a specific purpose, keyed by an opaque pairwise reference.
+///
+/// Customer identity stays with the partner (slide 041), so this row never holds a phone or
+/// account number — only `subjectRef`, the pairwise token the partner mints. Consent is the
+/// gate that turns telecom evidence from `NO_CONSENT` into `OK`, so it is modelled as first
+/// class rather than a boolean on another table.
+model ConsentRecord {
+  id             String        @id
+  organizationId String
+  /// Opaque, pairwise reference. Never a raw identifier (enforced by the deny-list).
+  subjectRef     String
+  purpose        Purpose
+  status         ConsentStatus @default(GRANTED)
+  /// Human-readable scope of what was consented to, for the DPIA. Never free-text PII.
+  scope          String
+
+  grantedAt   DateTime  @default(now())
+  /// End of the consent's validity. Distinct from `expiresAt`, which is retention.
+  validUntil  DateTime?
+  withdrawnAt DateTime?
+
+  correlationId String?
+  source        String
+  schemaVersion Int     @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Retention expiry, set from the applicable RetentionPolicy.
+  expiresAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// One current consent per subject and purpose within a tenant. Re-granting updates it.
+  @@unique([organizationId, subjectRef, purpose])
+  @@index([organizationId, status])
+  @@index([subjectRef])
+  @@index([expiresAt])
+  @@map("consent_records")
+}
+
+// ---------------------------------------------------------------------------
+// Ingested signals
+// ---------------------------------------------------------------------------
+
+/// A consented telecom scam-risk signal (slide 013). This is an evidence derivative: it
+/// records what the telecom observed (a suspicious call, a device change) as booleans and
+/// coarse categories, never a call recording, transcript, or telephone number.
+model TelecomRiskEvent {
+  id             String  @id
+  organizationId String
+  subjectRef     String
+  purpose        Purpose @default(PROTECT_PAYMENT)
+
+  eventType String
+
+  recentSuspiciousCall      Boolean              @default(false)
+  callerReputation          CallerReputation     @default(UNKNOWN)
+  callDurationSeconds       Int                  @default(0)
+  deviceChange              Boolean              @default(false)
+  accountTakeoverIndicators Boolean              @default(false)
+  scamCampaignMatch         Boolean              @default(false)
+  telecomEvidence           EvidenceAvailability @default(OK)
+  severity                  EventSeverity        @default(INFO)
+
+  observedAt DateTime
+  receivedAt DateTime @default(now())
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         CorrelationCase?
+
+  @@index([organizationId, observedAt(sort: Desc)])
+  @@index([subjectRef])
+  @@index([correlationId])
+  @@index([scamCampaignMatch])
+  @@index([expiresAt])
+  @@map("telecom_risk_events")
+}
+
+/// A bank payment intent submitted for a protection recommendation (slide 025). The amount
+/// is retained because the risk engine and the console explanation both need it; the
+/// network never moves money and never stores a card number, PAN, or raw account number —
+/// payer and payee are opaque pairwise references only.
+model PaymentIntent {
+  id             String  @id
+  organizationId String
+  subjectRef     String
+  /// Opaque pairwise reference for the payee, when the bank supplies one.
+  payeeRef       String?
+  purpose        Purpose @default(PROTECT_PAYMENT)
+
+  /// Minor units (e.g. pence). BigInt so a large synthetic transfer cannot overflow.
+  amountMinor BigInt
+  currency    String @db.Char(3)
+
+  firstTimePayee             Boolean                    @default(false)
+  payeeAgeDays               Int                        @default(0)
+  paymentVelocity24h         Int                        @default(0)
+  deviceChange               Boolean                    @default(false)
+  accountTakeoverIndicators  Boolean                    @default(false)
+  customerVulnerability      Boolean                    @default(false)
+  identityVerificationResult IdentityVerificationResult @default(NOT_CHECKED)
+  previousWarnings           Int                        @default(0)
+  channel                    String?
+
+  initiatedAt DateTime
+  receivedAt  DateTime @default(now())
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         CorrelationCase?
+
+  @@index([organizationId, initiatedAt(sort: Desc)])
+  @@index([subjectRef])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("payment_intents")
+}
+
+// ---------------------------------------------------------------------------
+// Correlation and decisioning
+// ---------------------------------------------------------------------------
+
+/// A correlated case: the join of a telecom signal and a payment intent for one subject
+/// within a time window (slide 026). The case is the aggregate root the console explores;
+/// assessments, recommendations, notifications, and the bank outcome all hang off it.
+model CorrelationCase {
+  id             String     @id
+  organizationId String
+  subjectRef     String
+  status         CaseStatus @default(OPEN)
+
+  telecomRiskEventId String? @unique
+  paymentIntentId    String? @unique
+  /// How the two sides were matched, for the explanation ("subject_ref within 15m").
+  correlationBasis   String
+
+  correlationId String
+
+  openedAt   DateTime  @default(now())
+  resolvedAt DateTime?
+
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  telecomRiskEvent TelecomRiskEvent? @relation(fields: [telecomRiskEventId], references: [id], onDelete: SetNull)
+  paymentIntent    PaymentIntent?    @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+
+  riskAssessments RiskAssessment[]
+  recommendations Recommendation[]
+  bankOutcomes    BankOutcome[]
+  notifications   NotificationRecord[]
+
+  @@index([organizationId, status, openedAt(sort: Desc)])
+  @@index([subjectRef])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("correlation_cases")
+}
+
+/// The deterministic scoring output for a case (slide 067). Kept as history — a case may be
+/// re-scored as evidence arrives — with the full explanation stored alongside the number so
+/// no recommendation is ever "just a score".
+model RiskAssessment {
+  id             String @id
+  organizationId String
+  caseId         String
+  subjectRef     String
+
+  riskScore   Int
+  riskLevel   RiskLevel
+  /// 0..1. Rises with missing/stale evidence; never lowers the score (slide 035).
+  uncertainty Decimal   @db.Decimal(4, 3)
+
+  reasonCodes         String[]
+  /// Redacted, display-safe breakdown: code, title, weight, category. Never raw evidence.
+  contributingSignals Json
+  rulesTriggered      String[]
+  evidenceSources     Json
+  /// Sources that could not contribute, kept explicit so missing data stays visible.
+  missingProviders    String[]
+  telecomEvidence     EvidenceAvailability @default(OK)
+
+  policyVersion String
+  rulesVersion  String
+  modelVersion  String?
+
+  processingTimeMs Int
+  evaluatedAt      DateTime @default(now())
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         CorrelationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  recommendations Recommendation[]
+
+  @@index([caseId, evaluatedAt(sort: Desc)])
+  @@index([organizationId, evaluatedAt(sort: Desc)])
+  @@index([riskLevel])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("risk_assessments")
+}
+
+/// The explainable recommendation issued to the bank (slide 069). Advisory only — the
+/// strongest value, `BLOCK_RECOMMENDED`, is still a recommendation, and `authorityNote`
+/// records the reminder that the bank decides.
+model Recommendation {
+  id               String @id
+  organizationId   String
+  caseId           String
+  riskAssessmentId String
+  subjectRef       String
+
+  recommendedAction  RecommendationAction
+  alternativeActions RecommendationAction[]
+  riskScore          Int
+  riskLevel          RiskLevel
+  uncertainty        Decimal                @db.Decimal(4, 3)
+
+  reasonCodes   String[]
+  summary       String
+  authorityNote String
+
+  policyVersion String
+  rulesVersion  String
+  modelVersion  String?
+
+  issuedAt DateTime @default(now())
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case           CorrelationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  riskAssessment RiskAssessment  @relation(fields: [riskAssessmentId], references: [id], onDelete: Cascade)
+
+  bankOutcomes BankOutcome[]
+
+  @@index([caseId, issuedAt(sort: Desc)])
+  @@index([organizationId, issuedAt(sort: Desc)])
+  @@index([recommendedAction])
+  @@index([riskLevel])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("recommendations")
+}
+
+/// The bank's decision and the eventual ground-truth outcome (slides 010, 030). One row per
+/// case per tenant, updated when the outcome is learned. No free-text notes: only enums and
+/// an optional opaque reference, so no sensitive narrative can leak in here.
+model BankOutcome {
+  id               String  @id
+  organizationId   String
+  caseId           String
+  recommendationId String?
+
+  bankDecision          BankDecision
+  outcomeClassification OutcomeClassification @default(PENDING)
+  /// Opaque partner-side reference (e.g. a case number), never PII.
+  reference             String?
+
+  decidedAt         DateTime  @default(now())
+  outcomeRecordedAt DateTime?
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case           CorrelationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, caseId])
+  @@index([organizationId, decidedAt(sort: Desc)])
+  @@index([outcomeClassification])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("bank_outcomes")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/// A customer-facing warning or operational notification. `dedupeKey` enforces the
+/// deduplication guarantee at the database level (matching the notification-dedup contract):
+/// the same logical warning cannot be sent twice, even under at-least-once retries.
+model NotificationRecord {
+  id             String  @id
+  organizationId String
+  caseId         String?
+  subjectRef     String
+
+  channel          NotificationChannel
+  notificationType String
+  status           NotificationStatus  @default(PENDING)
+  /// Idempotency token for this logical notification.
+  dedupeKey        String
+  attempt          Int                 @default(1)
+  /// Opaque provider message reference, never PII.
+  providerRef      String?
+
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
+
+  purpose       Purpose @default(PROTECT_PAYMENT)
+  correlationId String
+  source        String
+  schemaVersion Int     @default(1)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         CorrelationCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([caseId])
+  @@index([status])
+  @@index([correlationId])
+  @@index([expiresAt])
+  @@map("notification_records")
+}
+
+// ---------------------------------------------------------------------------
+// Operational events (live stream projection)
+// ---------------------------------------------------------------------------
+
+/// The persisted live-event stream that backs the console (operations.ts). `payloadPreview`
+/// is already redacted and truncated server-side before it reaches this table, so it is safe
+/// to render directly and never contains secrets or raw identifiers.
+model OperationalEvent {
+  id             String  @id
+  organizationId String?
+
+  type     String
+  severity EventSeverity          @default(INFO)
+  status   OperationalEventStatus @default(RECEIVED)
+
+  /// Tenant or partner label, safe to display.
+  actor      String
+  subjectRef String?
+  provider   String
+  attempt    Int     @default(1)
+  durationMs Int?
+  synthetic  Boolean @default(true)
+
+  payloadPreview Json
+
+  correlationId String
+  occurredAt    DateTime
+  recordedAt    DateTime @default(now())
+
+  schemaVersion Int       @default(1)
+  expiresAt     DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([provider])
+  @@index([correlationId])
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("operational_events")
+}
