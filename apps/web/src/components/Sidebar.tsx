@@ -44,7 +44,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-600">
-        Version 1a · Slice 1
+        Version 1a · Operations
       </div>
     </aside>
   );

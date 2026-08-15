@@ -32,6 +32,7 @@ export const createSimulatorRouter = (container: Container): Router => {
       correlationId,
       actorLabel: 'portal:risk-simulator',
       organizationId: container.syntheticOrganizationId,
+      subjectRef: input.subjectRef ?? container.syntheticSubjectRef,
     });
 
     container.store.recordEvaluation(output);

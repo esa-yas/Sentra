@@ -27,4 +27,4 @@ export {
   type EvaluatePaymentRiskOutput,
   type EvaluatePaymentRiskUseCase,
 } from './decision/evaluate-payment-risk';
-export { SIMULATOR_SCENARIOS } from './decision/scenarios';
+export { SIMULATOR_SCENARIOS, SYNTHETIC_BANK_SLUG, SYNTHETIC_DEMO_SUBJECT_REF } from './decision/scenarios';

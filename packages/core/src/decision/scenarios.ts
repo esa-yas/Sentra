@@ -6,11 +6,8 @@ import {
   type SimulatorScenario,
 } from '@sentra/contracts';
 
-/**
- * Preset synthetic scenarios the console can load into the simulator. These exist so the
- * demo journey is reproducible and so tests can assert the engine's behaviour against named
- * cases. All data is synthetic and contains no real identifiers.
- */
+export const SYNTHETIC_BANK_SLUG = 'bank-sandbox';
+export const SYNTHETIC_DEMO_SUBJECT_REF = 'subj_seed_payer_00000000001';
 export const SIMULATOR_SCENARIOS: readonly SimulatorScenario[] = [
   {
     id: 'app-impersonation-scam',

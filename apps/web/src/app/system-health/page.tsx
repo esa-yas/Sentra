@@ -71,7 +71,7 @@ export default function SystemHealthPage() {
             <StatCard label="Uptime" value={`${Math.round(health.uptimeSeconds)}s`} />
           </div>
 
-          <Panel title="Readiness dependencies" description="Reported by /ready. In-memory adapters report ready in Slice 1.">
+          <Panel title="Readiness dependencies" description="Reported by /ready. Real mode checks PostgreSQL connectivity.">
             {readiness === null || readiness.dependencies.length === 0 ? (
               <EmptyState title="No dependencies" description="The readiness probe reported no external dependencies." />
             ) : (

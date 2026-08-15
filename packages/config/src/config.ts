@@ -31,6 +31,7 @@ export interface AppConfig {
     readonly directUrl: string;
     readonly poolSize: number;
     readonly statementTimeoutMs: number;
+    readonly transactionTimeoutMs: number;
   };
   readonly redis: {
     readonly url: string;
@@ -58,6 +59,8 @@ export interface AppConfig {
   readonly decision: {
     readonly defaultDeadlineMs: number;
     readonly maxDeadlineMs: number;
+    /** Window used to join a telecom signal to a payment intent for the same subject. */
+    readonly correlationWindowSeconds: number;
   };
   readonly rateLimit: {
     readonly windowSeconds: number;
@@ -137,6 +140,12 @@ const collectSemanticProblems = (env: RawEnv): readonly string[] => {
     if (!env.DATABASE_URL.includes('sslmode=') && !env.DATABASE_URL.includes('ssl=')) {
       problems.push('DATABASE_URL must request TLS in production, for example by appending ?sslmode=require.');
     }
+
+    if (!env.DATABASE_DIRECT_URL.includes('sslmode=') && !env.DATABASE_DIRECT_URL.includes('ssl=')) {
+      problems.push(
+        'DATABASE_DIRECT_URL must request TLS in production, for example by appending ?sslmode=require.',
+      );
+    }
   }
 
   return problems;
@@ -185,6 +194,7 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
       directUrl: env.DATABASE_DIRECT_URL,
       poolSize: env.DATABASE_POOL_SIZE,
       statementTimeoutMs: env.DATABASE_STATEMENT_TIMEOUT_MS,
+      transactionTimeoutMs: env.DATABASE_TRANSACTION_TIMEOUT_MS,
     },
     redis: { url: env.REDIS_URL },
     supabase: {
@@ -213,6 +223,7 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
     decision: {
       defaultDeadlineMs: env.DEFAULT_DEADLINE_MS,
       maxDeadlineMs: env.MAX_DEADLINE_MS,
+      correlationWindowSeconds: env.DECISION_CORRELATION_WINDOW_SECONDS,
     },
     rateLimit: {
       windowSeconds: env.RATE_LIMIT_WINDOW_SECONDS,

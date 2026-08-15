@@ -94,7 +94,7 @@ export class FakeUnitOfWork implements UnitOfWork {
       throw new TransactionScopeClosedError(scope.scopeId);
     }
     if (state.locks.has(key)) {
-      throw new Error(`Lock ${key} is already held in scope ${scope.scopeId}.`);
+      return;
     }
     state.locks.add(key);
     this.coordinator.stage(scope.scopeId, {

@@ -256,6 +256,13 @@ export class InMemoryOperationsStore {
     ];
   }
 
+  public async checkDependencies(): Promise<readonly { name: string; status: 'ok' | 'unavailable'; latencyMs: number }[]> {
+    return [
+      { name: 'in-memory-store', status: 'ok', latencyMs: 0 },
+      { name: 'audit-chain', status: 'ok', latencyMs: 0 },
+    ];
+  }
+
   private indexAfter(ids: readonly string[], cursor: string): number {
     const index = ids.indexOf(cursor);
     return index < 0 ? 0 : index + 1;

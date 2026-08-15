@@ -8,7 +8,7 @@ import { buildContainer } from './container';
  * is invalid (fail loud, never fail subtly). All business logic lives behind the assembled
  * container; this file only wires and listens.
  */
-const main = (): void => {
+const main = async (): Promise<void> => {
   const config = loadEnv();
   const logger = createLogger({
     level: config.runtime.logLevel,
@@ -17,7 +17,7 @@ const main = (): void => {
     pretty: !config.runtime.isProduction,
   });
 
-  const container = buildContainer(config, logger);
+  const container = await buildContainer(config, logger);
   const app = createApp(container);
 
   logger.info('api_starting', {
@@ -31,10 +31,12 @@ const main = (): void => {
 
   const shutdown = (signal: string): void => {
     logger.info('api_shutting_down', { signal });
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void container.disconnect().finally(() => process.exit(0));
+    });
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
-main();
+void main();

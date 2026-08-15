@@ -47,7 +47,7 @@ export default function IntegrationsPage() {
     <>
       <PageHeader
         title="Integrations"
-        description="Connection state for every dependency and provider. In-memory dev adapters are wired in Slice 1; real providers land in later slices. Credentials are never exposed."
+        description="Connection state for every dependency and provider. Real mode reports PostgreSQL; Redis and queues remain unwired until later slices. Credentials are never exposed."
       />
 
       {error !== null && <div className="mb-4"><ErrorNotice message={error.message} /></div>}

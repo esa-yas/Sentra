@@ -41,8 +41,8 @@ export const envSchema = z.object({
   /** Build commit, injected by CI/Railway. Surfaced read-only on the development screen. */
   SERVICE_COMMIT: optionalNonEmpty,
   /**
-   * Which provider implementations the composition root wires. Version 1a ships only the
-   * in-memory mode; `real` (Postgres/Redis/BullMQ) is enabled from Slice 2 onward.
+   * Which provider implementations the composition root wires. `in-memory` is the Slice 1
+   * demonstration path; `real` selects Prisma/PostgreSQL persistence (Slice 2).
    */
   SENTRA_PROVIDER_MODE: z.enum(['in-memory', 'real']).default('in-memory'),
 
@@ -61,6 +61,7 @@ export const envSchema = z.object({
   DATABASE_DIRECT_URL: postgresUrlSchema,
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(10_000),
+  DATABASE_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(60_000),
 
   REDIS_URL: z.string().min(1).refine((value) => /^rediss?:\/\//.test(value), {
     message: 'Must be a redis:// or rediss:// connection string.',
@@ -86,6 +87,8 @@ export const envSchema = z.object({
 
   DEFAULT_DEADLINE_MS: z.coerce.number().int().min(50).max(10_000).default(650),
   MAX_DEADLINE_MS: z.coerce.number().int().min(50).max(30_000).default(2_000),
+  /** How far back a payment may look for a matching consented telecom signal. */
+  DECISION_CORRELATION_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
 
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3_600).default(60),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(600),

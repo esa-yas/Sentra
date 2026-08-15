@@ -127,3 +127,14 @@ export type {
   RetentionRepository,
   CreateRetentionPolicyInput,
 } from './repositories';
+
+export {
+  CONSENT_LOOKUP_STATUSES,
+  type ConsentLookupStatus,
+  type ConsentLookupResult,
+  type DecisionPersistence,
+  type PersistDecisionJourneyInput,
+  type PersistedDecisionJourney,
+} from './decision-persistence';
+
+export type { OperationsReadModel } from './operations-read-model';

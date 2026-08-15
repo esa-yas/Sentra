@@ -15,7 +15,7 @@ const APP_SCAM_BODY = {
 
 describe('operations read models', () => {
   it('summary starts empty and reflects an evaluation', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const before = await request(app).get('/api/operations/summary');
     expect(before.status).toBe(200);
@@ -35,7 +35,7 @@ describe('operations read models', () => {
   });
 
   it('lists events with a redacted payload preview and supports the id lookup', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
     await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
 
     const list = await request(app).get('/api/events');
@@ -55,7 +55,7 @@ describe('operations read models', () => {
   });
 
   it('filters events by type', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
     await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
 
     const filtered = await request(app)
@@ -70,7 +70,7 @@ describe('operations read models', () => {
   });
 
   it('serves the latest flow and the development status', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const emptyFlow = await request(app).get('/api/operations/flow/latest');
     expect(emptyFlow.status).toBe(200);
@@ -92,7 +92,7 @@ describe('operations read models', () => {
   });
 
   it('returns 404 for an unknown event', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
     const response = await request(app).get('/api/events/does-not-exist');
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('not_found');

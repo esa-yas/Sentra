@@ -18,7 +18,7 @@ const TEST_ENV: NodeJS.ProcessEnv = {
 
 export const buildTestConfig = (): AppConfig => loadConfig(TEST_ENV);
 
-export const buildTestApp = (): { app: Express; container: Container } => {
-  const container = buildContainer(buildTestConfig(), createNullLogger());
+export const buildTestApp = async (): Promise<{ app: Express; container: Container }> => {
+  const container = await buildContainer(buildTestConfig(), createNullLogger());
   return { app: createApp(container), container };
 };

@@ -70,7 +70,7 @@ export default function CaseDetailPage() {
         </div>
       ) : data === null ? (
         <Panel>
-          <EmptyState title="Case not found" description="This case is not in the current in-memory store." />
+          <EmptyState title="Case not found" description="This case is not in the current operations store." />
         </Panel>
       ) : (
         <div className="space-y-6">
@@ -84,7 +84,7 @@ export default function CaseDetailPage() {
 
 function CaseTimeline({ flow }: { flow: FlowRun }) {
   return (
-    <Panel title="Timeline" description="The path this case took through the pipeline. Downstream bank stages remain pending in Slice 1.">
+    <Panel title="Timeline" description="The path this case took through the pipeline. Downstream bank stages remain pending until the trust edge.">
       <ol className="relative space-y-4 border-l border-slate-800 pl-6">
         {flow.stages.map((stage) => (
           <li key={stage.stage} className="relative">

@@ -21,11 +21,12 @@ import type {
   AuditProvider,
   AuditRecordInput,
   Clock,
+  DecisionPersistence,
   IdGenerator,
   RecordedAuditEvent,
-  TransactionScope,
   UnitOfWork,
 } from '@sentra/ports';
+import { CONSENT_LOOKUP_STATUSES, type ConsentLookupStatus } from '@sentra/ports';
 import { evaluateScamRisk, type RiskAssessment } from './risk-engine';
 
 /**
@@ -41,6 +42,8 @@ export interface EvaluatePaymentRiskDeps {
   readonly ids: IdGenerator;
   readonly audit: AuditProvider;
   readonly unitOfWork: UnitOfWork;
+  /** When set, the journey is persisted atomically (Slice 2 real mode). */
+  readonly persistence?: DecisionPersistence;
 }
 
 export interface EvaluatePaymentRiskContext {
@@ -67,7 +70,7 @@ const levelToSeverity: Record<RiskLevel, EventSeverity> = {
 };
 
 export const createEvaluatePaymentRiskUseCase = (deps: EvaluatePaymentRiskDeps) => {
-  const { clock, ids, audit, unitOfWork } = deps;
+  const { clock, ids, audit, unitOfWork, persistence } = deps;
 
   const execute = async (
     input: SimulatorEvaluateRequest,
@@ -82,69 +85,100 @@ export const createEvaluatePaymentRiskUseCase = (deps: EvaluatePaymentRiskDeps) 
     const actorLabel = context.actorLabel ?? 'partner:bank-sandbox';
     const decisionId = ids.generate();
 
-    const telecomUsable =
-      input.telecomEvidence === EVIDENCE_AVAILABILITY.OK ||
-      input.telecomEvidence === EVIDENCE_AVAILABILITY.OK_NO_SIGNALS;
+    return unitOfWork.run(async (scope) => {
+      if (persistence !== undefined) {
+        const existing = await persistence.findByCorrelation(scope, organizationId, correlationId);
+        if (existing !== null) {
+          return {
+            recommendation: existing.recommendation,
+            events: existing.events,
+            flow: existing.flow,
+            assessment: evaluateScamRisk(input),
+          };
+        }
+      }
 
-    // Deterministic scoring is measured on its own so the flow can show a real duration.
-    const engineStart = clock.monotonicMs();
-    const assessment = evaluateScamRisk(input);
-    const engineDurationMs = Math.max(0, clock.monotonicMs() - engineStart);
+      let consentStatus: ConsentLookupStatus = CONSENT_LOOKUP_STATUSES.GRANTED;
+      let effectiveInput = input;
 
-    const recordedAudits: RecordedAuditEvent[] = [];
-    const auditByAction = new Map<string, RecordedAuditEvent>();
-
-    const record = async (
-      scope: TransactionScope,
-      partial: Omit<AuditRecordInput, 'organizationId' | 'purpose' | 'occurredAt' | 'actorType' | 'actorLabel'>,
-    ): Promise<RecordedAuditEvent> => {
-      const recorded = await audit.record(
-        {
+      if (persistence !== undefined) {
+        const lookedUp = await persistence.lookupConsent(scope, {
           organizationId,
-          actorType: ACTOR_TYPES.PARTNER,
-          actorLabel,
+          subjectRef,
           purpose: PURPOSES.PROTECT_PAYMENT,
-          outcome: AUDIT_OUTCOMES.ALLOWED,
-          occurredAt: clock.now(),
-          ...partial,
-        },
-        scope,
-      );
-      recordedAudits.push(recorded);
-      auditByAction.set(partial.action, recorded);
-      return recorded;
-    };
+          now: clock.now(),
+        });
+        consentStatus = lookedUp.status;
+        if (consentStatus !== CONSENT_LOOKUP_STATUSES.GRANTED) {
+          const evidence =
+            consentStatus === CONSENT_LOOKUP_STATUSES.UNAVAILABLE
+              ? EVIDENCE_AVAILABILITY.UNAVAILABLE
+              : EVIDENCE_AVAILABILITY.NO_CONSENT;
+          effectiveInput = { ...input, telecomEvidence: evidence };
+        }
+      }
 
-    await unitOfWork.run(async (scope) => {
+      const telecomUsable =
+        effectiveInput.telecomEvidence === EVIDENCE_AVAILABILITY.OK ||
+        effectiveInput.telecomEvidence === EVIDENCE_AVAILABILITY.OK_NO_SIGNALS;
+
+      const engineStart = clock.monotonicMs();
+      const assessment = evaluateScamRisk(effectiveInput);
+      const engineDurationMs = Math.max(0, clock.monotonicMs() - engineStart);
+
+      const recordedAudits: RecordedAuditEvent[] = [];
+      const auditByAction = new Map<string, RecordedAuditEvent>();
+
+      const record = async (
+        partial: Omit<AuditRecordInput, 'organizationId' | 'purpose' | 'occurredAt' | 'actorType' | 'actorLabel'>,
+      ): Promise<RecordedAuditEvent> => {
+        const recorded = await audit.record(
+          {
+            organizationId,
+            actorType: ACTOR_TYPES.PARTNER,
+            actorLabel,
+            purpose: PURPOSES.PROTECT_PAYMENT,
+            outcome: AUDIT_OUTCOMES.ALLOWED,
+            occurredAt: clock.now(),
+            correlationId,
+            ...partial,
+          },
+          scope,
+        );
+        recordedAudits.push(recorded);
+        auditByAction.set(partial.action, recorded);
+        return recorded;
+      };
+
       if (telecomUsable) {
-        await record(scope, {
+        await record({
           action: 'telecom_signal.received',
           resourceType: 'telecom_signal',
           resourceId: decisionId,
           metadata: {
-            recentSuspiciousCall: input.recentSuspiciousCall,
-            callerReputation: input.callerReputation,
-            telecomEvidence: input.telecomEvidence,
+            recentSuspiciousCall: effectiveInput.recentSuspiciousCall,
+            callerReputation: effectiveInput.callerReputation,
+            telecomEvidence: effectiveInput.telecomEvidence,
           },
         });
       }
-      await record(scope, {
+      await record({
         action: 'payment_intent.received',
         resourceType: 'payment_intent',
         resourceId: decisionId,
         metadata: {
-          amount: input.paymentAmount,
-          currency: input.currency,
-          firstTimePayee: input.firstTimePayee,
+          amount: effectiveInput.paymentAmount,
+          currency: effectiveInput.currency,
+          firstTimePayee: effectiveInput.firstTimePayee,
         },
       });
-      await record(scope, {
+      await record({
         action: 'correlation.matched',
         resourceType: 'protection_session',
         resourceId: decisionId,
-        metadata: { subjectRef, telecomEvidence: input.telecomEvidence },
+        metadata: { subjectRef, telecomEvidence: effectiveInput.telecomEvidence, consentStatus },
       });
-      await record(scope, {
+      await record({
         action: 'risk_assessment.completed',
         resourceType: 'risk_assessment',
         resourceId: decisionId,
@@ -155,7 +189,7 @@ export const createEvaluatePaymentRiskUseCase = (deps: EvaluatePaymentRiskDeps) 
           reasonCodes: [...assessment.reasonCodes],
         },
       });
-      await record(scope, {
+      await record({
         action: 'recommendation.issued',
         resourceType: 'recommendation',
         resourceId: decisionId,
@@ -165,72 +199,89 @@ export const createEvaluatePaymentRiskUseCase = (deps: EvaluatePaymentRiskDeps) 
           rulesVersion: assessment.rulesVersion,
         },
       });
+
+      const auditSummaries: AuditEventSummary[] = recordedAudits.map((recorded, index) => ({
+        id: recorded.id,
+        action: [...auditByAction.entries()].find(([, value]) => value === recorded)?.[0] ?? `audit.${index}`,
+        chainKey: recorded.chainKey,
+        sequence: recorded.sequence.toString(),
+        hashPrev: recorded.hashPrev,
+        hashSelf: recorded.hashSelf,
+        occurredAt: recorded.occurredAt.toISOString(),
+      }));
+
+      const processingTimeMs = Math.max(engineDurationMs, clock.monotonicMs() - startedMonotonic);
+      const evaluatedAtIso = clock.now().toISOString();
+
+      const recommendation: RecommendationView = {
+        decisionId,
+        correlationId,
+        subjectRef,
+        organizationId,
+        riskScore: assessment.riskScore,
+        riskLevel: assessment.riskLevel,
+        uncertainty: assessment.uncertainty,
+        recommendedAction: assessment.recommendedAction,
+        alternativeActions: [...assessment.alternativeActions],
+        reasonCodes: [...assessment.reasonCodes],
+        contributingSignals: [...assessment.contributingSignals],
+        rulesTriggered: [...assessment.rulesTriggered],
+        evidenceSources: [...assessment.evidenceSources],
+        missingProviders: [...assessment.missingProviders],
+        policyVersion: assessment.policyVersion,
+        rulesVersion: assessment.rulesVersion,
+        modelVersion: null,
+        processingTimeMs,
+        evaluatedAt: evaluatedAtIso,
+        summary: assessment.summary,
+        authorityNote:
+          'This is an advisory recommendation. The bank retains final authority over the payment decision.',
+        auditEvents: auditSummaries,
+        synthetic: SYNTHETIC,
+      };
+
+      const events = buildEvents({
+        ids,
+        correlationId,
+        actorLabel,
+        subjectRef,
+        input: effectiveInput,
+        assessment,
+        evaluatedAtIso,
+        engineDurationMs,
+        telecomUsable,
+      });
+
+      const flow = buildFlow({
+        correlationId,
+        decisionId,
+        startedAtIso: startedAt.toISOString(),
+        input: effectiveInput,
+        assessment,
+        engineDurationMs,
+        telecomUsable,
+        auditByAction,
+        consentStatus,
+      });
+
+      if (persistence !== undefined) {
+        await persistence.persistJourney(scope, {
+          organizationId,
+          subjectRef,
+          correlationId,
+          actorLabel,
+          input: effectiveInput,
+          recommendation,
+          events,
+          flow,
+          telecomUsable,
+          consentStatus,
+          now: clock.now(),
+        });
+      }
+
+      return { recommendation, events, flow, assessment };
     });
-
-    const auditSummaries: AuditEventSummary[] = recordedAudits.map((recorded, index) => ({
-      id: recorded.id,
-      action: [...auditByAction.entries()].find(([, value]) => value === recorded)?.[0] ?? `audit.${index}`,
-      chainKey: recorded.chainKey,
-      sequence: recorded.sequence.toString(),
-      hashPrev: recorded.hashPrev,
-      hashSelf: recorded.hashSelf,
-      occurredAt: recorded.occurredAt.toISOString(),
-    }));
-
-    const processingTimeMs = Math.max(engineDurationMs, clock.monotonicMs() - startedMonotonic);
-    const evaluatedAtIso = clock.now().toISOString();
-
-    const recommendation: RecommendationView = {
-      decisionId,
-      correlationId,
-      subjectRef,
-      organizationId,
-      riskScore: assessment.riskScore,
-      riskLevel: assessment.riskLevel,
-      uncertainty: assessment.uncertainty,
-      recommendedAction: assessment.recommendedAction,
-      alternativeActions: [...assessment.alternativeActions],
-      reasonCodes: [...assessment.reasonCodes],
-      contributingSignals: [...assessment.contributingSignals],
-      rulesTriggered: [...assessment.rulesTriggered],
-      evidenceSources: [...assessment.evidenceSources],
-      missingProviders: [...assessment.missingProviders],
-      policyVersion: assessment.policyVersion,
-      rulesVersion: assessment.rulesVersion,
-      modelVersion: null,
-      processingTimeMs,
-      evaluatedAt: evaluatedAtIso,
-      summary: assessment.summary,
-      authorityNote:
-        'This is an advisory recommendation. The bank retains final authority over the payment decision.',
-      auditEvents: auditSummaries,
-      synthetic: SYNTHETIC,
-    };
-
-    const events = buildEvents({
-      ids,
-      correlationId,
-      actorLabel,
-      subjectRef,
-      input,
-      assessment,
-      evaluatedAtIso,
-      engineDurationMs,
-      telecomUsable,
-    });
-
-    const flow = buildFlow({
-      correlationId,
-      decisionId,
-      startedAtIso: startedAt.toISOString(),
-      input,
-      assessment,
-      engineDurationMs,
-      telecomUsable,
-      auditByAction,
-    });
-
-    return { recommendation, events, flow, assessment };
   };
 
   return { execute };
@@ -366,6 +417,7 @@ interface BuildFlowArgs {
   readonly engineDurationMs: number;
   readonly telecomUsable: boolean;
   readonly auditByAction: Map<string, RecordedAuditEvent>;
+  readonly consentStatus: ConsentLookupStatus;
 }
 
 const buildFlow = (args: BuildFlowArgs): FlowRun => {
@@ -373,11 +425,13 @@ const buildFlow = (args: BuildFlowArgs): FlowRun => {
   const auditId = (action: string): string | null => auditByAction.get(action)?.id ?? null;
 
   const consentUsable = args.telecomUsable;
-  const consentStatus = consentUsable
-    ? FLOW_STAGE_STATUSES.COMPLETED
-    : input.telecomEvidence === EVIDENCE_AVAILABILITY.NO_CONSENT
-      ? FLOW_STAGE_STATUSES.SKIPPED
-      : FLOW_STAGE_STATUSES.COMPLETED;
+  const consentStatus = args.consentStatus !== CONSENT_LOOKUP_STATUSES.GRANTED
+    ? FLOW_STAGE_STATUSES.SKIPPED
+    : consentUsable
+      ? FLOW_STAGE_STATUSES.COMPLETED
+      : input.telecomEvidence === EVIDENCE_AVAILABILITY.NO_CONSENT
+        ? FLOW_STAGE_STATUSES.SKIPPED
+        : FLOW_STAGE_STATUSES.COMPLETED;
 
   const stages: FlowStageResult[] = [
     {
@@ -415,9 +469,11 @@ const buildFlow = (args: BuildFlowArgs): FlowRun => {
       correlationId,
       inputSummary: `Telecom evidence: ${input.telecomEvidence}`,
       outputSummary:
-        consentStatus === FLOW_STAGE_STATUSES.SKIPPED
-          ? 'No consent covers this subject; telecom signals not used'
-          : 'Consent present or not required for payment-only evidence',
+        args.consentStatus !== CONSENT_LOOKUP_STATUSES.GRANTED
+          ? `Consent ${args.consentStatus}; telecom signals not used as granted evidence`
+          : consentStatus === FLOW_STAGE_STATUSES.SKIPPED
+            ? 'No consent covers this subject; telecom signals not used'
+            : 'Consent present or not required for payment-only evidence',
       failureBehavior: 'NO_CONSENT proceeds without telecom evidence; never blocks the decision.',
       relatedAuditEventId: null,
     },

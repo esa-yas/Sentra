@@ -19,18 +19,21 @@ export const createHealthRouter = (container: Container): Router => {
     res.json(body);
   });
 
-  router.get('/ready', (_req, res) => {
+  router.get('/ready', async (_req, res) => {
+    const dependencies = await container.store.checkDependencies();
+    const failed = dependencies.some((item) => item.status !== 'ok');
     const body: ReadinessResponse = {
-      status: 'ok',
+      status: failed ? 'unavailable' : 'ok',
       service: config.runtime.serviceName,
       version: config.runtime.serviceVersion,
       uptimeSeconds: uptimeSeconds(),
-      dependencies: [
-        { name: 'in-memory-store', status: 'ok', latencyMs: 0 },
-        { name: 'audit-chain', status: 'ok', latencyMs: 0 },
-      ],
+      dependencies: dependencies.map((item) => ({
+        name: item.name,
+        status: item.status,
+        latencyMs: item.latencyMs,
+      })),
     };
-    res.json(body);
+    res.status(failed ? 503 : 200).json(body);
   });
 
   return router;

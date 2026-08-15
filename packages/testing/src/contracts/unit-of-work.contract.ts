@@ -11,9 +11,9 @@ export interface UnitOfWorkContractHarness {
   readonly read: (key: string) => Promise<unknown>;
   readonly write: (scope: TransactionScope, key: string, value: unknown) => Promise<void>;
   readonly stageAudit?: (scope: TransactionScope) => Promise<void>;
-  readonly listAudit?: () => readonly unknown[];
+  readonly listAudit?: () => readonly unknown[] | Promise<readonly unknown[]>;
   readonly stageOutbox?: (scope: TransactionScope, eventId: string) => Promise<void>;
-  readonly listOutbox?: () => readonly string[];
+  readonly listOutbox?: () => readonly string[] | Promise<readonly string[]>;
   readonly advanceTime?: (ms: number) => void;
 }
 
@@ -54,13 +54,13 @@ export const describeUnitOfWorkContract = (
       await expect(
         uow.run(async (scope) => {
           await stageAudit(scope);
-          stageOutbox(scope, '01OUTBOX_ROLLBACK');
+          await stageOutbox(scope, '01OUTBOX_ROLLBACK');
           throw new Error('rollback composite');
         }),
       ).rejects.toThrow('rollback composite');
 
-      expect(listAudit()).toHaveLength(0);
-      expect(listOutbox()).toHaveLength(0);
+      expect(await Promise.resolve(listAudit())).toHaveLength(0);
+      expect(await Promise.resolve(listOutbox())).toHaveLength(0);
     });
 
     it('rejects nested run calls while a transaction is open', async () => {
@@ -103,12 +103,12 @@ export const describeUnitOfWorkContract = (
       await expect(read('tenant')).resolves.toBeUndefined();
     });
 
-    it('serialises concurrent access to the same lock key inside one transaction', async () => {
+    it('treats a second lock of the same key in one transaction as reentrant', async () => {
       const { uow } = factory();
 
       await uow.run(async (scope) => {
         await uow.lock(scope, 'audit:org_1');
-        await expect(uow.lock(scope, 'audit:org_1')).rejects.toThrow();
+        await expect(uow.lock(scope, 'audit:org_1')).resolves.toBeUndefined();
       });
     });
 

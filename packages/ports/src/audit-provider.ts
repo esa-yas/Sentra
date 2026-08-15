@@ -35,6 +35,9 @@ export interface AuditRecordInput {
   ipHash?: string | null;
   userAgentHash?: string | null;
   occurredAt?: Date;
+  /** Joins this record to the request/decision trace. Empty when the caller has none. */
+  correlationId?: string;
+  requestId?: string | null;
 }
 
 export interface RecordedAuditEvent {

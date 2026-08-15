@@ -18,7 +18,7 @@ const APP_SCAM_BODY = {
 
 describe('POST /api/simulator/evaluate', () => {
   it('returns an explainable, advisory recommendation', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const response = await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
 
@@ -35,7 +35,7 @@ describe('POST /api/simulator/evaluate', () => {
   });
 
   it('echoes the same correlation id in the header and the body', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
     const supplied = 'crl_supertest_fixed_one';
 
     const response = await request(app)
@@ -49,7 +49,7 @@ describe('POST /api/simulator/evaluate', () => {
   });
 
   it('rejects a payload carrying a forbidden field', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const response = await request(app)
       .post('/api/simulator/evaluate')
@@ -60,7 +60,7 @@ describe('POST /api/simulator/evaluate', () => {
   });
 
   it('rejects an invalid payload with a validation error', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const response = await request(app)
       .post('/api/simulator/evaluate')
@@ -72,7 +72,7 @@ describe('POST /api/simulator/evaluate', () => {
   });
 
   it('exposes preset synthetic scenarios', async () => {
-    const { app } = buildTestApp();
+    const { app } = await buildTestApp();
 
     const response = await request(app).get('/api/simulator/scenarios');
     expect(response.status).toBe(200);
