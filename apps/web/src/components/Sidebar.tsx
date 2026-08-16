@@ -7,10 +7,16 @@ import { NAV_ITEMS } from './nav';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { hasPermission, loading } = useSession();
-  // Show the full nav until the session resolves, then hide what the role can't reach.
+  const { hasPermission, loading, activeMembership } = useSession();
+  // Role-aware hiding only applies once an active membership is resolved. While loading, or if
+  // no membership resolves, show the full nav — the API remains the real authorization boundary,
+  // so a UX glitch can never leave an operator staring at an empty sidebar.
   const items = NAV_ITEMS.filter(
-    (item) => loading || item.permission === undefined || hasPermission(item.permission),
+    (item) =>
+      loading ||
+      activeMembership === null ||
+      item.permission === undefined ||
+      hasPermission(item.permission),
   );
 
   return (
