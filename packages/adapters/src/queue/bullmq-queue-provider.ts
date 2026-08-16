@@ -169,11 +169,28 @@ export class BullmqQueueProvider implements QueueProvider, QueueInspector {
   // QueueInspector
   // -------------------------------------------------------------------------
 
+  /**
+   * Bounds a transport round-trip so an unreachable Redis rejects within the configured
+   * command timeout instead of waiting out BullMQ's connection-ready retry loop. Without
+   * this, a health read against a dead Redis hangs the Queue Monitor and API Activity
+   * endpoints for tens of seconds; the inspector's own catch turns the rejection into a
+   * clean UNAVAILABLE result. `Promise.race` attaches a reaction to the operation, so a
+   * late rejection from the loser is handled rather than surfacing as unhandled.
+   */
+  private bounded<T>(operation: Promise<T>): Promise<T> {
+    const ms = this.config.redis.commandTimeoutMs;
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Redis operation exceeded ${ms}ms`)), ms);
+    });
+    return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
+  }
+
   public async isReachable(): Promise<boolean> {
     try {
       // A counts read round-trips to Redis; success proves the transport is reachable.
       const queue = this.getQueue('recommendation-events');
-      await queue.getJobCounts('waiting');
+      await this.bounded(queue.getJobCounts('waiting'));
       return true;
     } catch {
       return false;
@@ -183,7 +200,7 @@ export class BullmqQueueProvider implements QueueProvider, QueueInspector {
   public async countWorkers(queueName: string): Promise<number> {
     try {
       const queue = this.getQueue(queueName);
-      const workers = await queue.getWorkers();
+      const workers = await this.bounded(queue.getWorkers());
       return workers.length;
     } catch {
       return 0;
@@ -193,14 +210,10 @@ export class BullmqQueueProvider implements QueueProvider, QueueInspector {
   public async getQueueHealth(queueName: string): Promise<RawQueueHealth> {
     const queue = this.getQueue(queueName);
     try {
-      const counts = await queue.getJobCounts(
-        'waiting',
-        'active',
-        'delayed',
-        'completed',
-        'failed',
+      const counts = await this.bounded(
+        queue.getJobCounts('waiting', 'active', 'delayed', 'completed', 'failed'),
       );
-      const paused = await queue.isPaused();
+      const paused = await this.bounded(queue.isPaused());
       return {
         name: queueName,
         reachable: true,
