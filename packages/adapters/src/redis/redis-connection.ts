@@ -11,21 +11,25 @@ import { Redis, type RedisOptions } from 'ioredis';
 export type RedisConnectionRole = 'cache' | 'queue-client' | 'queue-subscriber' | 'queue-worker';
 
 /**
- * BullMQ's blocking commands require `maxRetriesPerRequest: null`. The cache path wants the
- * opposite — a bounded number of retries so a command rejects instead of hanging — so the
- * two roles are configured differently from the same base.
+ * Builds the ioredis options for a connection role. Extracted as a pure function so the
+ * fail-fast guarantees below can be unit-tested without opening a socket.
+ *
+ * BullMQ's blocking commands (worker/subscriber) require `maxRetriesPerRequest: null` and
+ * must NOT carry a `commandTimeout`, or a legitimately blocking `BRPOPLPUSH` would abort.
+ * Every non-blocking role — the cache and the queue producer/inspector — instead gets a
+ * bounded `commandTimeout`, so a command that reaches a connected-but-slow Redis rejects
+ * within a few seconds rather than stalling the request path. (The separate case of BullMQ
+ * waiting for connection *readiness* against a wholly unreachable Redis is bounded in the
+ * queue provider's inspector reads, not here.)
  */
-export const createRedisConnection = (
-  config: AppConfig,
-  role: RedisConnectionRole,
-): Redis => {
+export const redisOptionsForRole = (config: AppConfig, role: RedisConnectionRole): RedisOptions => {
   const isBlockingRole = role === 'queue-worker' || role === 'queue-subscriber';
 
-  const options: RedisOptions = {
+  return {
     connectTimeout: config.redis.connectTimeoutMs,
-    commandTimeout: role === 'cache' ? config.redis.commandTimeoutMs : undefined,
-    // Blocking BullMQ operations need this set to null; the cache path keeps a small bound so
-    // a command fails loudly rather than queueing forever behind a dead connection.
+    // Bounded per-command timeout for every non-blocking role, so a stalled command fails
+    // loudly instead of hanging the request path. Blocking BullMQ roles must not set it.
+    commandTimeout: isBlockingRole ? undefined : config.redis.commandTimeoutMs,
     maxRetriesPerRequest: isBlockingRole ? null : 3,
     enableReadyCheck: true,
     // Reconnect with capped exponential-ish backoff. Correctness never depends on a live
@@ -36,6 +40,7 @@ export const createRedisConnection = (
     enableOfflineQueue: role === 'cache',
     lazyConnect: false,
   };
-
-  return new Redis(config.redis.url, options);
 };
+
+export const createRedisConnection = (config: AppConfig, role: RedisConnectionRole): Redis =>
+  new Redis(config.redis.url, redisOptionsForRole(config, role));

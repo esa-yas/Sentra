@@ -185,8 +185,22 @@ export class QueueAdmin {
     const counts = await this.deps.outboxStore.statusCounts();
     const oldestPendingAgeMs = await this.deps.outboxStore.oldestPendingAgeMs(this.deps.clock.now());
 
+    // The transport probe in providerHealth() already round-tripped to Redis and failed
+    // fast. When it is unreachable, skip N more per-queue probes that would each wait out
+    // the command timeout against the same dead Redis, and report the queues UNAVAILABLE.
+    const transportReachable =
+      health.queueTransport.state === PROVIDER_HEALTH_STATES.CONNECTED;
     const queues: QueueHealth[] = [];
     for (const name of KNOWN_QUEUE_NAMES) {
+      if (!transportReachable) {
+        queues.push({
+          name,
+          state: PROVIDER_HEALTH_STATES.UNAVAILABLE,
+          paused: false,
+          counts: { waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0 },
+        });
+        continue;
+      }
       const raw = await this.deps.queue.getQueueHealth(name);
       queues.push({
         name,
