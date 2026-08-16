@@ -69,4 +69,13 @@ export {
   createSupabaseUserTokenVerifier,
   type SupabaseUserTokenVerifierOptions,
 } from './auth/supabase-user-token-verifier';
+export { PrismaUserRepository, createPrismaUserRepository } from './prisma/prisma-user-repository';
+export {
+  PrismaIdentityLinkRepository,
+  createPrismaIdentityLinkRepository,
+} from './prisma/prisma-identity-link-repository';
+export {
+  PrismaMembershipRepository,
+  createPrismaMembershipRepository,
+} from './prisma/prisma-membership-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';
