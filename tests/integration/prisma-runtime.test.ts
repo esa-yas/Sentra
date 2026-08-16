@@ -556,10 +556,10 @@ describe('PostgreSQL operations read model', () => {
       });
     }
 
-    const firstPage = await store.listDecisions(2);
+    const firstPage = await store.listDecisions(organizationId, 2);
     expect(firstPage.items).toHaveLength(2);
     expect(firstPage.nextCursor).toBeDefined();
-    const secondPage = await store.listDecisions(2, firstPage.nextCursor);
+    const secondPage = await store.listDecisions(organizationId, 2, firstPage.nextCursor);
     expect(secondPage.items).toHaveLength(1);
     const ids = [...firstPage.items, ...secondPage.items].map((item) => item.decisionId);
     expect(new Set(ids).size).toBe(3);

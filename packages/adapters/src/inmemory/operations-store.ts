@@ -78,19 +78,22 @@ export class InMemoryOperationsStore {
     }
   }
 
-  public getDecision(decisionId: string): RecommendationView | undefined {
+  // The in-memory store is a single synthetic session (demo mode), so `organizationId` is
+  // accepted to satisfy the port but not used to partition data — real tenant isolation is
+  // enforced by the PostgreSQL adapter.
+  public getDecision(_organizationId: string, decisionId: string): RecommendationView | undefined {
     return this.decisionsById.get(decisionId);
   }
 
-  public getFlowByCorrelation(correlationId: string): FlowRun | undefined {
+  public getFlowByCorrelation(_organizationId: string, correlationId: string): FlowRun | undefined {
     return this.flowsByCorrelation.get(correlationId);
   }
 
-  public latestFlow(): FlowRun | null {
+  public latestFlow(_organizationId: string): FlowRun | null {
     return this.latestFlowRun;
   }
 
-  public listDecisions(limit = 50, cursor?: string): DecisionList {
+  public listDecisions(_organizationId: string, limit = 50, cursor?: string): DecisionList {
     const start = cursor === undefined ? 0 : this.indexAfter(this.decisions.map((d) => d.decisionId), cursor);
     const slice = this.decisions.slice(start, start + limit);
     const items: DecisionListItem[] = slice.map((decision) => ({
@@ -115,7 +118,7 @@ export class InMemoryOperationsStore {
     return result;
   }
 
-  public listEvents(query: EventListQuery): EventList {
+  public listEvents(_organizationId: string, query: EventListQuery): EventList {
     const filtered = this.events.filter((event) => {
       if (query.type !== undefined && event.type !== query.type) {
         return false;
@@ -148,11 +151,11 @@ export class InMemoryOperationsStore {
     return result;
   }
 
-  public getEvent(id: string): OperationalEvent | undefined {
+  public getEvent(_organizationId: string, id: string): OperationalEvent | undefined {
     return this.events.find((event) => event.id === id);
   }
 
-  public summary(environment: string): OperationsSummary {
+  public summary(_organizationId: string, environment: string): OperationsSummary {
     const byAction = (action: string): number =>
       this.decisions.filter((d) => d.recommendedAction === action).length;
     const byLevel = (level: string): number =>

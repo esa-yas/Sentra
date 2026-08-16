@@ -55,9 +55,12 @@ export class PostgresOperationsStore implements OperationsReadModel {
     }
   }
 
-  public async getDecision(decisionId: string): Promise<RecommendationView | undefined> {
-    const row = await this.prisma.recommendation.findUnique({
-      where: { id: decisionId },
+  public async getDecision(
+    organizationId: string,
+    decisionId: string,
+  ): Promise<RecommendationView | undefined> {
+    const row = await this.prisma.recommendation.findFirst({
+      where: { id: decisionId, organizationId },
       include: { riskAssessment: true, case: { include: { bankOutcomes: true } } },
     });
     if (row === null) {
@@ -70,25 +73,34 @@ export class PostgresOperationsStore implements OperationsReadModel {
     return toRecommendationView(row, row.riskAssessment, auditEvents);
   }
 
-  public async getFlowByCorrelation(correlationId: string): Promise<FlowRun | undefined> {
-    const assembled = await this.loadByCorrelation(correlationId);
+  public async getFlowByCorrelation(
+    organizationId: string,
+    correlationId: string,
+  ): Promise<FlowRun | undefined> {
+    const assembled = await this.loadByCorrelation(organizationId, correlationId);
     return assembled?.flow;
   }
 
-  public async latestFlow(): Promise<FlowRun | null> {
+  public async latestFlow(organizationId: string): Promise<FlowRun | null> {
     const latest = await this.prisma.recommendation.findFirst({
+      where: { organizationId },
       orderBy: { issuedAt: 'desc' },
       select: { correlationId: true },
     });
     if (latest === null) {
       return null;
     }
-    return (await this.getFlowByCorrelation(latest.correlationId)) ?? null;
+    return (await this.getFlowByCorrelation(organizationId, latest.correlationId)) ?? null;
   }
 
-  public async listDecisions(limit = 50, cursor?: string): Promise<DecisionList> {
+  public async listDecisions(
+    organizationId: string,
+    limit = 50,
+    cursor?: string,
+  ): Promise<DecisionList> {
     const take = Math.min(Math.max(limit, 1), LIST_CAP);
     const rows = await this.prisma.recommendation.findMany({
+      where: { organizationId },
       orderBy: [{ issuedAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(cursor === undefined
@@ -114,10 +126,11 @@ export class PostgresOperationsStore implements OperationsReadModel {
     return result;
   }
 
-  public async listEvents(query: EventListQuery): Promise<EventList> {
+  public async listEvents(organizationId: string, query: EventListQuery): Promise<EventList> {
     const take = Math.min(query.limit, LIST_CAP);
     const rows = await this.prisma.operationalEvent.findMany({
       where: {
+        organizationId,
         ...(query.type === undefined ? {} : { type: query.type }),
         ...(query.severity === undefined ? {} : { severity: query.severity }),
         ...(query.status === undefined ? {} : { status: query.status }),
@@ -136,12 +149,15 @@ export class PostgresOperationsStore implements OperationsReadModel {
     return result;
   }
 
-  public async getEvent(id: string): Promise<OperationalEvent | undefined> {
-    const row = await this.prisma.operationalEvent.findUnique({ where: { id } });
+  public async getEvent(
+    organizationId: string,
+    id: string,
+  ): Promise<OperationalEvent | undefined> {
+    const row = await this.prisma.operationalEvent.findFirst({ where: { id, organizationId } });
     return row === null ? undefined : toOperationalEvent(row);
   }
 
-  public async summary(environment: string): Promise<OperationsSummary> {
+  public async summary(organizationId: string, environment: string): Promise<OperationsSummary> {
     const [
       telecomCount,
       paymentCount,
@@ -150,12 +166,19 @@ export class PostgresOperationsStore implements OperationsReadModel {
       confirmedScams,
       falsePositives,
     ] = await Promise.all([
-      this.prisma.telecomRiskEvent.count(),
-      this.prisma.paymentIntent.count(),
-      this.prisma.correlationCase.count(),
-      this.prisma.recommendation.findMany({ select: { recommendedAction: true, riskLevel: true } }),
-      this.prisma.bankOutcome.count({ where: { outcomeClassification: 'CONFIRMED_SCAM' } }),
-      this.prisma.bankOutcome.count({ where: { outcomeClassification: 'FALSE_POSITIVE' } }),
+      this.prisma.telecomRiskEvent.count({ where: { organizationId } }),
+      this.prisma.paymentIntent.count({ where: { organizationId } }),
+      this.prisma.correlationCase.count({ where: { organizationId } }),
+      this.prisma.recommendation.findMany({
+        where: { organizationId },
+        select: { recommendedAction: true, riskLevel: true },
+      }),
+      this.prisma.bankOutcome.count({
+        where: { organizationId, outcomeClassification: 'CONFIRMED_SCAM' },
+      }),
+      this.prisma.bankOutcome.count({
+        where: { organizationId, outcomeClassification: 'FALSE_POSITIVE' },
+      }),
     ]);
 
     const byAction = (action: string): number =>
@@ -173,6 +196,7 @@ export class PostgresOperationsStore implements OperationsReadModel {
     };
 
     const last = await this.prisma.recommendation.findFirst({
+      where: { organizationId },
       orderBy: { issuedAt: 'desc' },
       select: { issuedAt: true },
     });
@@ -276,9 +300,12 @@ export class PostgresOperationsStore implements OperationsReadModel {
     }
   }
 
-  private async loadByCorrelation(correlationId: string): Promise<{ flow: FlowRun } | null> {
+  private async loadByCorrelation(
+    organizationId: string,
+    correlationId: string,
+  ): Promise<{ flow: FlowRun } | null> {
     const recommendation = await this.prisma.recommendation.findFirst({
-      where: { correlationId },
+      where: { correlationId, organizationId },
       orderBy: { issuedAt: 'desc' },
       include: { riskAssessment: true, case: { include: { bankOutcomes: true } } },
     });
