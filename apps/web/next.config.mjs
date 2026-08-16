@@ -49,7 +49,11 @@ if (process.env.NODE_ENV !== 'production' && existsSync(envFile)) {
   }
 }
 
-const apiOrigin = process.env.SENTRA_API_ORIGIN ?? 'http://localhost:3000';
+// Default to the IPv4 loopback rather than `localhost`. On dual-stack machines
+// `localhost` resolves to IPv6 `::1` first; if anything else holds `[::1]:3000`
+// the proxy would silently reach the wrong server. The API binds all interfaces,
+// so 127.0.0.1 always reaches it. Override with SENTRA_API_ORIGIN when needed.
+const apiOrigin = process.env.SENTRA_API_ORIGIN ?? 'http://127.0.0.1:3000';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

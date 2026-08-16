@@ -1,0 +1,89 @@
+name: verify
+
+# Runs the same gate as `pnpm verify` on every push and pull request, so a
+# regression in typecheck, lint, dependency boundaries, or unit tests is caught
+# automatically rather than discovered on a developer's machine. A second job
+# runs the PostgreSQL + Redis integration suite against service containers.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck · lint · boundaries · unit
+    runs-on: ubuntu-latest
+    env:
+      # Prisma's datasource block references these; `prisma generate` and the type
+      # build need them defined, but never connect, so placeholders are correct here.
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      DATABASE_DIRECT_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @sentra/db run generate
+      - name: Verify (typecheck, lint, boundaries, unit tests)
+        run: pnpm verify
+
+  integration:
+    name: integration (postgres + redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sentra
+          POSTGRES_PASSWORD: sentra
+          POSTGRES_DB: sentra_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentra -d sentra_test"
+          --health-interval 3s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s --health-timeout 5s --health-retries 20
+    env:
+      # Every integration test overrides config to point at TEST_DATABASE_URL, so all
+      # three URLs target the throwaway service DB — never a shared/managed database.
+      SENTRA_PROVIDER_MODE: real
+      DATABASE_URL: postgresql://sentra:sentra@localhost:5432/sentra_test
+      DATABASE_DIRECT_URL: postgresql://sentra:sentra@localhost:5432/sentra_test
+      TEST_DATABASE_URL: postgresql://sentra:sentra@localhost:5432/sentra_test?schema=public
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @sentra/db run generate
+      - name: Apply migrations to the test database
+        run: pnpm --filter @sentra/db run deploy
+      - name: Integration tests
+        run: pnpm test:integration
