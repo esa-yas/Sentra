@@ -8,6 +8,10 @@ export default tseslint.config(
       '**/.next/**',
       '**/coverage/**',
       '**/node_modules/**',
+      // Ephemeral agent worktrees hold full repo copies whose nested paths defeat the
+      // package-scoped rule overrides below; they are never part of the linted source.
+      '.claude/**',
+      '**/.claude/**',
       'packages/db/src/generated/**',
       '**/*.tsbuildinfo',
       '**/next-env.d.ts',
