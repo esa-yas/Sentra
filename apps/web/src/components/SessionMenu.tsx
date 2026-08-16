@@ -1,75 +1,66 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { authEnabled } from '@/lib/supabase/config';
-import { createClient } from '@/lib/supabase/client';
-import { getCurrentUser, postLogout } from '@/lib/api';
+import { useSession } from '@/lib/session';
 
 /**
- * Shows the signed-in user and a sign-out control. Renders nothing when auth is not
- * configured (open demo mode) or before a session resolves. The email comes from the API's
- * verified `/auth/me`, not from the raw token, so what the badge shows is what the server
- * actually authorized.
+ * Topbar identity controls: the active organization (a selector when the operator belongs to
+ * more than one), the signed-in user, and sign-out. Renders nothing in demo mode or before a
+ * session resolves. The active org drives which tenant's data the console requests.
  */
 export function SessionMenu() {
   const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
+  const { authEnabled, user, memberships, activeOrgId, setActiveOrgId, signOut } = useSession();
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!authEnabled) {
-      return;
-    }
-    const supabase = createClient();
-    let active = true;
-
-    const load = async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token === undefined) {
-        if (active) setEmail(null);
-        return;
-      }
-      const me = await getCurrentUser(token);
-      if (active) setEmail(me.data?.user.email ?? null);
-    };
-
-    void load();
-    const { data: subscription } = supabase.auth.onAuthStateChange(() => {
-      void load();
-    });
-    return () => {
-      active = false;
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
-
-  if (!authEnabled || email === null) {
+  if (!authEnabled || user === null) {
     return null;
   }
 
-  const signOut = async () => {
+  const onSignOut = async () => {
     setBusy(true);
-    const supabase = createClient();
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (token !== undefined) {
-      await postLogout(token);
-    }
-    await supabase.auth.signOut();
+    await signOut();
     router.push('/login');
     router.refresh();
   };
 
+  const orgControl =
+    memberships.length > 1 ? (
+      <select
+        value={activeOrgId ?? ''}
+        onChange={(event) => {
+          setActiveOrgId(event.target.value);
+          router.refresh();
+        }}
+        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200 outline-none"
+        aria-label="Active organization"
+      >
+        {memberships.map((membership) => (
+          <option key={membership.organizationId} value={membership.organizationId}>
+            {membership.organizationSlug} · {membership.role.toLowerCase()}
+          </option>
+        ))}
+      </select>
+    ) : memberships.length === 1 ? (
+      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-400">
+        {memberships[0]!.organizationSlug} · {memberships[0]!.role.toLowerCase()}
+      </span>
+    ) : (
+      <span className="rounded-md border border-amber-700/50 bg-amber-900/20 px-2 py-1 text-amber-300">
+        no organization
+      </span>
+    );
+
   return (
     <div className="flex items-center gap-2 text-xs">
+      {orgControl}
       <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300">
-        {email}
+        {user.email}
       </span>
       <button
         type="button"
-        onClick={() => void signOut()}
+        onClick={() => void onSignOut()}
         disabled={busy}
         className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:bg-slate-800 disabled:opacity-60"
       >

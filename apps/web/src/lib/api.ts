@@ -30,13 +30,14 @@ import type {
  */
 import { authEnabled } from './supabase/config';
 import { createClient } from './supabase/client';
+import { readActiveOrg } from './active-org';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
 /**
  * Attaches the signed-in user's Supabase access token when auth is enabled, so the API can
- * authenticate the console's calls. The active organization is resolved server-side from the
- * user's memberships (a single-org user needs no explicit selection).
+ * authenticate the console's calls, plus the selected organization when the operator belongs
+ * to more than one (a single-org user is resolved server-side).
  */
 async function authHeaders(): Promise<Record<string, string>> {
   if (!authEnabled) {
@@ -45,7 +46,15 @@ async function authHeaders(): Promise<Record<string, string>> {
   try {
     const { data } = await createClient().auth.getSession();
     const token = data.session?.access_token;
-    return token === undefined ? {} : { Authorization: `Bearer ${token}` };
+    if (token === undefined) {
+      return {};
+    }
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    const activeOrg = readActiveOrg();
+    if (activeOrg !== null) {
+      headers['x-organization-id'] = activeOrg;
+    }
+    return headers;
   } catch {
     return {};
   }
