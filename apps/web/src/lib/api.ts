@@ -5,11 +5,21 @@ import type {
   FlowRun,
   HealthResponse,
   OperationsSummary,
+  OutboxEventView,
+  OutboxList,
   ProviderHealth,
+  QueueActionResult,
+  QueueJobList,
+  QueueMonitorSummary,
   ReadinessResponse,
   RecommendationView,
   SimulatorEvaluateRequest,
   SimulatorScenarioList,
+  PartnerApiActivityList,
+  PartnerConnectionList,
+  SandboxSignedRequestResult,
+  IssuedSigningKeyResponse,
+  PartnerCredentialResponse,
 } from '@sentra/contracts';
 
 /**
@@ -117,6 +127,54 @@ export interface EvaluateResponse {
 export const evaluate = (input: SimulatorEvaluateRequest): Promise<ApiResult<EvaluateResponse>> =>
   apiFetch('/api/simulator/evaluate', { method: 'POST', body: JSON.stringify(input) });
 
+const buildQuery = (query: Record<string, string | number | undefined>): string => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') {
+      params.set(key, String(value));
+    }
+  }
+  const suffix = params.toString();
+  return suffix.length > 0 ? `?${suffix}` : '';
+};
+
+export const getQueueMonitor = (): Promise<ApiResult<QueueMonitorSummary>> =>
+  apiFetch('/api/operations/queues');
+
+export const getQueueJobs = (
+  queueName: string,
+  query: Record<string, string | number | undefined> = {},
+): Promise<ApiResult<QueueJobList>> =>
+  apiFetch(`/api/operations/queues/${encodeURIComponent(queueName)}/jobs${buildQuery(query)}`);
+
+export const getOutbox = (
+  query: Record<string, string | number | undefined> = {},
+): Promise<ApiResult<OutboxList>> => apiFetch(`/api/operations/outbox${buildQuery(query)}`);
+
+export const getOutboxEvent = (eventId: string): Promise<ApiResult<OutboxEventView>> =>
+  apiFetch(`/api/operations/outbox/${encodeURIComponent(eventId)}`);
+
+export const retryQueueJob = (
+  queueName: string,
+  jobId: string,
+): Promise<ApiResult<QueueActionResult>> =>
+  apiFetch(`/api/operations/queues/${encodeURIComponent(queueName)}/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  });
+
+export const replayOutboxEvent = (eventId: string): Promise<ApiResult<QueueActionResult>> =>
+  apiFetch(`/api/operations/outbox/${encodeURIComponent(eventId)}/replay`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  });
+
+export const duplicateOutboxDelivery = (eventId: string): Promise<ApiResult<QueueActionResult>> =>
+  apiFetch(`/api/operations/outbox/${encodeURIComponent(eventId)}/duplicate`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  });
+
 export const getEvents = (
   query: Record<string, string | number | undefined> = {},
 ): Promise<ApiResult<EventList>> => {
@@ -129,3 +187,42 @@ export const getEvents = (
   const suffix = params.toString();
   return apiFetch(`/api/events${suffix.length > 0 ? `?${suffix}` : ''}`);
 };
+
+export const getApiActivity = (
+  query: Record<string, string | number | undefined> = {},
+): Promise<ApiResult<PartnerApiActivityList & { redisState?: string; degraded?: boolean; detail?: string }>> =>
+  apiFetch(`/api/operations/api-activity${buildQuery(query)}`);
+
+export const getPartners = (
+  query: Record<string, string | number | undefined> = {},
+): Promise<ApiResult<PartnerConnectionList & { bootstrapEnabled?: boolean; degraded?: boolean; detail?: string }>> =>
+  apiFetch(`/api/operations/partners${buildQuery(query)}`);
+
+export const createPartnerConnection = (
+  body: Record<string, unknown>,
+): Promise<ApiResult<PartnerCredentialResponse>> =>
+  apiFetch('/api/operations/partners', { method: 'POST', body: JSON.stringify(body) });
+
+export const rotatePartnerKey = (connectionId: string): Promise<ApiResult<IssuedSigningKeyResponse>> =>
+  apiFetch(`/api/operations/partners/${encodeURIComponent(connectionId)}/keys`, { method: 'POST', body: '{}' });
+
+export const revokePartnerKey = (connectionId: string, kid: string): Promise<ApiResult<{ revoked: boolean }>> =>
+  apiFetch(
+    `/api/operations/partners/${encodeURIComponent(connectionId)}/keys/${encodeURIComponent(kid)}/revoke`,
+    { method: 'POST', body: '{}' },
+  );
+
+export const revokePartnerConnection = (connectionId: string): Promise<ApiResult<{ revoked: boolean }>> =>
+  apiFetch(`/api/operations/partners/${encodeURIComponent(connectionId)}/revoke`, {
+    method: 'POST',
+    body: '{}',
+  });
+
+export const runSandboxSignedRequest = (
+  kind: 'TELECOM_EVENTS' | 'BANK_API',
+): Promise<ApiResult<SandboxSignedRequestResult>> =>
+  apiFetch('/api/operations/sandbox/signed-request', {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  });
+

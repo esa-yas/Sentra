@@ -9,6 +9,7 @@ export const HTTP_HEADERS = {
   DEADLINE_MS: 'x-deadline-ms',
   /** Purpose the caller is acting under, when a token permits more than one. */
   PURPOSE: 'x-purpose',
+  BOOTSTRAP_TOKEN: 'x-sentra-bootstrap-token',
   RETRY_AFTER: 'retry-after',
   RATE_LIMIT_LIMIT: 'ratelimit-limit',
   RATE_LIMIT_REMAINING: 'ratelimit-remaining',

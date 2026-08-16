@@ -8,6 +8,7 @@ import type {
   OrganizationType,
   PartnerConnectionKind,
   PartnerConnectionStatus,
+  PartnerEnvironment,
   PartnerScope,
   Purpose,
   RetentionAction,
@@ -86,6 +87,7 @@ export interface PartnerConnectionRecord {
   organizationId: string;
   name: string;
   kind: PartnerConnectionKind;
+  environment: PartnerEnvironment;
   clientId: string;
   scopes: readonly PartnerScope[];
   allowedPurposes: readonly Purpose[];
@@ -93,6 +95,7 @@ export interface PartnerConnectionRecord {
   tokenTtlSeconds: number;
   status: PartnerConnectionStatus;
   lastRotatedAt: Date | null;
+  lastUsedAt: Date | null;
   rotationDueAt: Date | null;
   createdAt: Date;
   createdBy: string | null;
@@ -118,6 +121,7 @@ export interface PartnerSigningKeyRecord {
   notAfter: Date | null;
   createdAt: Date;
   revokedAt: Date | null;
+  lastUsedAt: Date | null;
 }
 
 export interface AuditEventRecord {

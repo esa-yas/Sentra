@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { correlationIdSchema } from '../identifiers';
+import { correlationIdSchema, ulidSchema } from '../identifiers';
 import { riskLevelSchema, recommendationActionSchema } from './decision';
 
 /**
@@ -336,3 +336,274 @@ export const decisionListSchema = z.object({
 });
 
 export type DecisionList = z.infer<typeof decisionListSchema>;
+
+// ---------------------------------------------------------------------------
+// Queue Monitor read models (Slice 3 durable delivery)
+//
+// Dedicated projections for the operations console, not raw BullMQ or Redis dumps. Payload
+// previews are already redacted server-side; a raw queue payload never reaches the UI.
+// ---------------------------------------------------------------------------
+
+/** Lifecycle of a transactional-outbox row. Mirrors the persisted OutboxStatus. */
+export const outboxStatusSchema = z.enum([
+  'PENDING',
+  'PUBLISHING',
+  'PUBLISHED',
+  'FAILED',
+  'DEAD_LETTER',
+]);
+export type OutboxStatusValue = z.infer<typeof outboxStatusSchema>;
+
+/** Job lifecycle states surfaced from BullMQ. */
+export const queueJobStateSchema = z.enum([
+  'waiting',
+  'active',
+  'delayed',
+  'completed',
+  'failed',
+  'paused',
+  'unknown',
+]);
+export type QueueJobState = z.infer<typeof queueJobStateSchema>;
+
+/** Health rollup and counters for a single queue. */
+export const queueHealthSchema = z.object({
+  name: z.string(),
+  state: providerHealthStateSchema,
+  paused: z.boolean(),
+  counts: z.object({
+    waiting: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    delayed: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  }),
+});
+export type QueueHealth = z.infer<typeof queueHealthSchema>;
+
+/** One BullMQ job, redacted and safe to render. */
+export const queueJobViewSchema = z.object({
+  id: z.string(),
+  queue: z.string(),
+  name: z.string(),
+  eventId: z.string().nullable(),
+  eventType: z.string().nullable(),
+  eventVersion: z.number().int().nullable(),
+  organizationLabel: z.string().nullable(),
+  correlationId: z.string().nullable(),
+  state: queueJobStateSchema,
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().nonnegative(),
+  createdAt: z.string().datetime().nullable(),
+  availableAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+  errorSummary: z.string().nullable(),
+  synthetic: z.boolean(),
+  payloadPreview: z.record(z.unknown()),
+});
+export type QueueJobView = z.infer<typeof queueJobViewSchema>;
+
+/** One transactional-outbox row, redacted and safe to render. */
+export const outboxEventViewSchema = z.object({
+  eventId: z.string(),
+  eventType: z.string(),
+  schemaVersion: z.number().int(),
+  aggregateType: z.string(),
+  aggregateId: z.string(),
+  queue: z.string().nullable(),
+  organizationLabel: z.string().nullable(),
+  correlationId: correlationIdSchema,
+  status: outboxStatusSchema,
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  availableAt: z.string().datetime(),
+  claimedAt: z.string().datetime().nullable(),
+  publishedAt: z.string().datetime().nullable(),
+  errorSummary: z.string().nullable(),
+  synthetic: z.boolean(),
+  payloadPreview: z.record(z.unknown()),
+});
+export type OutboxEventView = z.infer<typeof outboxEventViewSchema>;
+
+/** Aggregate durable-delivery summary for the Queue Monitor header. */
+export const queueMonitorSummarySchema = z.object({
+  generatedAt: z.string().datetime(),
+  redis: providerHealthSchema,
+  queueTransport: providerHealthSchema,
+  worker: providerHealthSchema,
+  publisher: providerHealthSchema,
+  outbox: z.object({
+    origin: metricOriginSchema,
+    pending: z.number().int().nonnegative(),
+    publishing: z.number().int().nonnegative(),
+    published: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    deadLetter: z.number().int().nonnegative(),
+    oldestPendingAgeMs: z.number().int().nonnegative().nullable(),
+  }),
+  queues: z.array(queueHealthSchema),
+});
+export type QueueMonitorSummary = z.infer<typeof queueMonitorSummarySchema>;
+
+export const queueJobListQuerySchema = z.object({
+  state: queueJobStateSchema.optional(),
+  eventType: z.string().optional(),
+  correlationId: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type QueueJobListQuery = z.infer<typeof queueJobListQuerySchema>;
+
+export const queueJobListSchema = z.object({
+  items: z.array(queueJobViewSchema),
+  nextCursor: z.string().optional(),
+});
+export type QueueJobList = z.infer<typeof queueJobListSchema>;
+
+export const outboxListQuerySchema = z.object({
+  status: outboxStatusSchema.optional(),
+  eventType: z.string().optional(),
+  correlationId: z.string().optional(),
+  occurredAfter: z.string().datetime().optional(),
+  occurredBefore: z.string().datetime().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type OutboxListQuery = z.infer<typeof outboxListQuerySchema>;
+
+export const outboxListSchema = z.object({
+  items: z.array(outboxEventViewSchema),
+  nextCursor: z.string().optional(),
+});
+export type OutboxList = z.infer<typeof outboxListSchema>;
+
+/** Development-only queue action result. */
+export const queueActionResultSchema = z.object({
+  action: z.enum(['RETRY_JOB', 'REPLAY_OUTBOX', 'DUPLICATE_DELIVERY']),
+  accepted: z.boolean(),
+  detail: z.string(),
+  correlationId: correlationIdSchema,
+});
+export type QueueActionResult = z.infer<typeof queueActionResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Partner API activity (Slice 4A)
+// ---------------------------------------------------------------------------
+
+export const PARTNER_CHECK_RESULTS = {
+  PASSED: 'PASSED',
+  FAILED: 'FAILED',
+  MISSING: 'MISSING',
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
+} as const;
+
+export type PartnerCheckResult = (typeof PARTNER_CHECK_RESULTS)[keyof typeof PARTNER_CHECK_RESULTS];
+
+export const partnerCheckResultSchema = z.enum([
+  PARTNER_CHECK_RESULTS.PASSED,
+  PARTNER_CHECK_RESULTS.FAILED,
+  PARTNER_CHECK_RESULTS.MISSING,
+  PARTNER_CHECK_RESULTS.NOT_APPLICABLE,
+]);
+
+export const partnerApiRequestViewSchema = z.object({
+  id: z.string(),
+  occurredAt: z.string().datetime(),
+  organizationId: z.string().nullable(),
+  organizationLabel: z.string().nullable(),
+  partnerConnectionId: z.string().nullable(),
+  partnerLabel: z.string().nullable(),
+  endpoint: z.string(),
+  method: z.string(),
+  statusCode: z.number().int(),
+  durationMs: z.number().nonnegative(),
+  correlationId: correlationIdSchema,
+  authentication: partnerCheckResultSchema,
+  signature: partnerCheckResultSchema,
+  replay: partnerCheckResultSchema,
+  idempotency: partnerCheckResultSchema,
+  rateLimit: partnerCheckResultSchema,
+  errorCode: z.string().nullable(),
+  environment: z.enum(['SANDBOX', 'PRODUCTION', 'UNKNOWN']),
+  synthetic: z.boolean(),
+});
+
+export type PartnerApiRequestView = z.infer<typeof partnerApiRequestViewSchema>;
+
+export const partnerApiActivityQuerySchema = z.object({
+  organizationId: z.string().optional(),
+  partnerConnectionId: z.string().optional(),
+  endpoint: z.string().max(128).optional(),
+  method: z.string().max(8).optional(),
+  status: z.coerce.number().int().optional(),
+  correlationId: z.string().optional(),
+  environment: z.enum(['SANDBOX', 'PRODUCTION']).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type PartnerApiActivityQuery = z.infer<typeof partnerApiActivityQuerySchema>;
+
+export const partnerApiActivityListSchema = z.object({
+  items: z.array(partnerApiRequestViewSchema),
+  nextCursor: z.string().optional(),
+});
+export type PartnerApiActivityList = z.infer<typeof partnerApiActivityListSchema>;
+
+export const partnerConnectionListQuerySchema = z.object({
+  organizationId: z.string().optional(),
+  kind: z.enum(['BANK_API', 'TELECOM_EVENTS']).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'REVOKED']).optional(),
+  environment: z.enum(['SANDBOX', 'PRODUCTION']).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type PartnerConnectionListQuery = z.infer<typeof partnerConnectionListQuerySchema>;
+
+export const partnerConnectionListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string(),
+      organizationId: z.string(),
+      organizationLabel: z.string(),
+      name: z.string(),
+      kind: z.enum(['BANK_API', 'TELECOM_EVENTS']),
+      environment: z.enum(['SANDBOX', 'PRODUCTION']),
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'REVOKED']),
+      scopes: z.array(z.string()),
+      activeKeyIds: z.array(z.string()),
+      keyExpiresAt: z.string().datetime().nullable(),
+      lastUsedAt: z.string().datetime().nullable(),
+      recentFailures: z.number().int().nonnegative(),
+      createdAt: z.string().datetime(),
+    }),
+  ),
+  nextCursor: z.string().optional(),
+});
+export type PartnerConnectionList = z.infer<typeof partnerConnectionListSchema>;
+
+export const sandboxSignedRequestSchema = z
+  .object({
+    kind: z.enum(['TELECOM_EVENTS', 'BANK_API']),
+    organizationId: ulidSchema.optional(),
+  })
+  .strict();
+export type SandboxSignedRequest = z.infer<typeof sandboxSignedRequestSchema>;
+
+export const sandboxSignedRequestResultSchema = z.object({
+  kind: z.enum(['TELECOM_EVENTS', 'BANK_API']),
+  endpoint: z.string(),
+  method: z.literal('POST'),
+  canonicalString: z.string(),
+  headers: z.record(z.string()),
+  body: z.unknown(),
+  responseStatus: z.number().int(),
+  responseBody: z.unknown(),
+  correlationId: correlationIdSchema,
+  idempotencyKey: z.string(),
+  nodeExample: z.string(),
+  curlExample: z.string(),
+  connectionId: z.string().optional(),
+  organizationId: z.string().optional(),
+});
+export type SandboxSignedRequestResult = z.infer<typeof sandboxSignedRequestResultSchema>;

@@ -57,9 +57,51 @@ export type DomainEventEnvelope = z.infer<typeof domainEventEnvelopeSchema>;
 export const QUEUE_NAMES = {
   DOMAIN_EVENTS: 'sentra.domain-events',
   RETENTION: 'sentra.retention',
+  /**
+   * Slice 3 durable-delivery queue. Carries `recommendation.issued` events claimed from the
+   * transactional outbox. A small explicit catalog — never a queue name derived from input.
+   */
+  RECOMMENDATION_EVENTS: 'recommendation-events',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
+
+/** The fixed set of queues the operations API may inspect. */
+export const KNOWN_QUEUE_NAMES: readonly QueueName[] = [
+  QUEUE_NAMES.RECOMMENDATION_EVENTS,
+  QUEUE_NAMES.DOMAIN_EVENTS,
+  QUEUE_NAMES.RETENTION,
+];
+
+export const isKnownQueueName = (value: string): value is QueueName =>
+  (KNOWN_QUEUE_NAMES as readonly string[]).includes(value);
+
+/**
+ * The outbox `recommendation.issued` event. Not part of the {@link DOMAIN_EVENT_TYPES}
+ * enum because it is a decision-domain event rather than a tenancy/partner event, but it
+ * shares the same at-least-once, minimal-payload discipline.
+ */
+export const RECOMMENDATION_ISSUED_EVENT_TYPE = 'recommendation.issued';
+
+/**
+ * The minimal, redacted job payload published for a `recommendation.issued` event. It names
+ * what changed and where to read it — it never carries transcripts, credentials, or raw
+ * identifiers (slide 034).
+ */
+export const recommendationIssuedJobSchema = z.object({
+  eventId: ulidSchema,
+  eventType: z.literal(RECOMMENDATION_ISSUED_EVENT_TYPE),
+  schemaVersion: z.number().int().positive(),
+  organizationId: ulidSchema.nullable(),
+  aggregateType: z.string().min(1).max(64),
+  aggregateId: z.string().min(1).max(128),
+  correlationId: correlationIdSchema,
+  occurredAt: z.string().datetime(),
+  /** Minimal decision summary, already redacted. */
+  payload: z.record(z.unknown()),
+});
+
+export type RecommendationIssuedJob = z.infer<typeof recommendationIssuedJobSchema>;
 
 /** Job payloads for the retention queue. */
 export const retentionSweepJobSchema = z.object({
@@ -74,6 +116,7 @@ export type RetentionSweepJob = z.infer<typeof retentionSweepJobSchema>;
 export const JOB_NAMES = {
   RETENTION_SWEEP: 'retention.sweep',
   PUBLISH_DOMAIN_EVENT: 'domain-event.publish',
+  PUBLISH_RECOMMENDATION: 'recommendation.issued.publish',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];

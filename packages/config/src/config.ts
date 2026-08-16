@@ -35,6 +35,26 @@ export interface AppConfig {
   };
   readonly redis: {
     readonly url: string;
+    /** Namespace prefixed to every cache key. */
+    readonly keyPrefix: string;
+    readonly connectTimeoutMs: number;
+    readonly commandTimeoutMs: number;
+    readonly maxReconnectDelayMs: number;
+  };
+  readonly queue: {
+    /** BullMQ key prefix. */
+    readonly prefix: string;
+    readonly workerConcurrency: number;
+    readonly workerPort: number;
+    /** Whether the worker process also runs the outbox publisher loop. */
+    readonly runPublisherInWorker: boolean;
+    readonly retry: {
+      readonly maxAttempts: number;
+      readonly initialDelayMs: number;
+      readonly backoff: 'exponential' | 'fixed';
+    };
+    readonly completedJobRetentionSeconds: number;
+    readonly failedJobRetentionSeconds: number;
   };
   readonly supabase: {
     readonly url?: string;
@@ -56,6 +76,15 @@ export interface AppConfig {
     readonly tokenTtlSeconds: number;
     readonly clockToleranceSeconds: number;
   };
+  readonly signing: {
+    readonly allowedAlgorithms: readonly string[];
+    readonly timestampSkewSeconds: number;
+    readonly replayWindowSeconds: number;
+  };
+  readonly partnerBootstrap: {
+    readonly enabled: boolean;
+    readonly token?: string;
+  };
   readonly decision: {
     readonly defaultDeadlineMs: number;
     readonly maxDeadlineMs: number;
@@ -66,6 +95,9 @@ export interface AppConfig {
     readonly windowSeconds: number;
     readonly maxRequests: number;
     readonly tokenEndpointMaxRequests: number;
+    readonly partnerWriteMaxRequests: number;
+    readonly partnerOrgMaxRequests: number;
+    readonly partnerEndpointMaxRequests: number;
   };
   readonly sentry: {
     readonly dsn?: string;
@@ -131,6 +163,12 @@ const collectSemanticProblems = (env: RawEnv): readonly string[] => {
       problems.push('CORS_ALLOWED_ORIGINS must name explicit origins in production; a wildcard is not permitted.');
     }
 
+    if (env.PARTNER_BOOTSTRAP_ENABLED) {
+      problems.push(
+        'PARTNER_BOOTSTRAP_ENABLED must be false in production. Slice 4B replaces bootstrap credential issuance with authenticated human administrators.',
+      );
+    }
+
     for (const origin of parseOriginList(env.CORS_ALLOWED_ORIGINS)) {
       if (origin.startsWith('http://') && !origin.startsWith('http://localhost')) {
         problems.push(`CORS origin ${origin} must use https in production.`);
@@ -145,6 +183,19 @@ const collectSemanticProblems = (env: RawEnv): readonly string[] => {
       problems.push(
         'DATABASE_DIRECT_URL must request TLS in production, for example by appending ?sslmode=require.',
       );
+    }
+  }
+
+  const allowedAlgorithms = env.SIGNING_ALLOWED_ALGORITHMS.split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const forbidden = new Set(['none', 'None', 'NONE', 'HS256', 'HS384', 'HS512']);
+  if (allowedAlgorithms.length === 0) {
+    problems.push('SIGNING_ALLOWED_ALGORITHMS must name at least one algorithm (ES256).');
+  }
+  for (const algorithm of allowedAlgorithms) {
+    if (forbidden.has(algorithm) || !['ES256', 'ES384', 'EdDSA'].includes(algorithm)) {
+      problems.push(`SIGNING_ALLOWED_ALGORITHMS must not include "${algorithm}".`);
     }
   }
 
@@ -196,7 +247,26 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
       statementTimeoutMs: env.DATABASE_STATEMENT_TIMEOUT_MS,
       transactionTimeoutMs: env.DATABASE_TRANSACTION_TIMEOUT_MS,
     },
-    redis: { url: env.REDIS_URL },
+    redis: {
+      url: env.REDIS_URL,
+      keyPrefix: env.REDIS_KEY_PREFIX,
+      connectTimeoutMs: env.REDIS_CONNECT_TIMEOUT_MS,
+      commandTimeoutMs: env.REDIS_COMMAND_TIMEOUT_MS,
+      maxReconnectDelayMs: env.REDIS_MAX_RECONNECT_DELAY_MS,
+    },
+    queue: {
+      prefix: env.QUEUE_PREFIX,
+      workerConcurrency: env.WORKER_CONCURRENCY,
+      workerPort: env.WORKER_PORT,
+      runPublisherInWorker: env.WORKER_RUN_PUBLISHER,
+      retry: {
+        maxAttempts: env.WORKER_RETRY_MAX_ATTEMPTS,
+        initialDelayMs: env.WORKER_RETRY_INITIAL_DELAY_MS,
+        backoff: env.WORKER_RETRY_BACKOFF,
+      },
+      completedJobRetentionSeconds: env.QUEUE_COMPLETED_JOB_RETENTION_SECONDS,
+      failedJobRetentionSeconds: env.QUEUE_FAILED_JOB_RETENTION_SECONDS,
+    },
     supabase: {
       ...(env.SUPABASE_URL === undefined ? {} : { url: env.SUPABASE_URL }),
       ...(env.SUPABASE_JWT_ISSUER === undefined ? {} : { jwtIssuer: env.SUPABASE_JWT_ISSUER }),
@@ -220,6 +290,17 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
       tokenTtlSeconds: env.PARTNER_TOKEN_TTL_SECONDS,
       clockToleranceSeconds: env.PARTNER_TOKEN_CLOCK_TOLERANCE_SECONDS,
     },
+    signing: {
+      allowedAlgorithms: env.SIGNING_ALLOWED_ALGORITHMS.split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+      timestampSkewSeconds: env.SIGNING_TIMESTAMP_SKEW_SECONDS,
+      replayWindowSeconds: env.SIGNING_REPLAY_WINDOW_SECONDS,
+    },
+    partnerBootstrap: {
+      enabled: env.PARTNER_BOOTSTRAP_ENABLED,
+      ...(env.PARTNER_BOOTSTRAP_TOKEN === undefined ? {} : { token: env.PARTNER_BOOTSTRAP_TOKEN }),
+    },
     decision: {
       defaultDeadlineMs: env.DEFAULT_DEADLINE_MS,
       maxDeadlineMs: env.MAX_DEADLINE_MS,
@@ -229,6 +310,9 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
       windowSeconds: env.RATE_LIMIT_WINDOW_SECONDS,
       maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
       tokenEndpointMaxRequests: env.RATE_LIMIT_TOKEN_MAX_REQUESTS,
+      partnerWriteMaxRequests: env.RATE_LIMIT_PARTNER_WRITE_MAX_REQUESTS,
+      partnerOrgMaxRequests: env.RATE_LIMIT_PARTNER_ORG_MAX_REQUESTS,
+      partnerEndpointMaxRequests: env.RATE_LIMIT_PARTNER_ENDPOINT_MAX_REQUESTS,
     },
     sentry: {
       ...(env.SENTRY_DSN === undefined ? {} : { dsn: env.SENTRY_DSN }),
@@ -273,8 +357,25 @@ let cached: AppConfig | undefined;
  */
 export const loadEnv = (): AppConfig => {
   if (cached === undefined) {
-    loadDotEnvFile();
-    cached = loadConfig();
+    const loaded = loadDotEnvFile();
+    try {
+      cached = loadConfig();
+    } catch (error) {
+      if (
+        error instanceof ValidationError &&
+        !loaded.skippedBecauseProduction &&
+        !loaded.fileFound
+      ) {
+        const problems = (error.details?.['problems'] as string[] | undefined) ?? [];
+        throw new ValidationError('The environment configuration is invalid.', {
+          problems: [
+            `No .env file found at ${loaded.envFilePath}. Copy .env.example to the repository root (not into apps/api or apps/worker).`,
+            ...problems,
+          ],
+        });
+      }
+      throw error;
+    }
   }
   return cached;
 };
@@ -292,6 +393,7 @@ const SECRET_PATHS: readonly string[] = [
   'supabase.serviceRoleKey',
   'partnerAuth.privateKeyPem',
   'partnerAuth.publicKeyPem',
+  'partnerBootstrap.token',
   'sentry.dsn',
 ];
 

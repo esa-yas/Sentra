@@ -47,7 +47,7 @@ export default function IntegrationsPage() {
     <>
       <PageHeader
         title="Integrations"
-        description="Connection state for every dependency and provider. Real mode reports PostgreSQL; Redis and queues remain unwired until later slices. Credentials are never exposed."
+        description="Connection state for every dependency and provider. Real mode reports PostgreSQL, Redis, the BullMQ transport, the worker, and the outbox publisher. Credentials are never exposed."
       />
 
       {error !== null && <div className="mb-4"><ErrorNotice message={error.message} /></div>}

@@ -20,6 +20,10 @@ export const ERROR_CODES = {
   IDEMPOTENCY_KEY_REUSED: 'idempotency_key_reused',
   IDEMPOTENT_REQUEST_IN_PROGRESS: 'idempotent_request_in_progress',
   RATE_LIMITED: 'rate_limited',
+  SIGNATURE_INVALID: 'signature_invalid',
+  REPLAY_DETECTED: 'replay_detected',
+  TIMESTAMP_INVALID: 'timestamp_invalid',
+  DIGEST_MISMATCH: 'digest_mismatch',
   DEADLINE_EXCEEDED: 'deadline_exceeded',
   DEPENDENCY_UNAVAILABLE: 'dependency_unavailable',
   AUDIT_CHAIN_BROKEN: 'audit_chain_broken',
@@ -174,6 +178,42 @@ export class RateLimitedError extends AppError {
 
   public constructor(public readonly retryAfterSeconds: number) {
     super('Too many requests. Slow down and retry after the indicated interval.', { retryAfterSeconds });
+  }
+}
+
+export class SignatureInvalidError extends AppError {
+  public readonly code = ERROR_CODES.SIGNATURE_INVALID;
+  public readonly httpStatus = 401;
+
+  public constructor(message = 'The request signature is not valid.') {
+    super(message);
+  }
+}
+
+export class ReplayDetectedError extends AppError {
+  public readonly code = ERROR_CODES.REPLAY_DETECTED;
+  public readonly httpStatus = 401;
+
+  public constructor(message = 'This nonce has already been used inside the replay window.') {
+    super(message);
+  }
+}
+
+export class TimestampInvalidError extends AppError {
+  public readonly code = ERROR_CODES.TIMESTAMP_INVALID;
+  public readonly httpStatus = 401;
+
+  public constructor(message = 'The request timestamp is outside the accepted window.') {
+    super(message);
+  }
+}
+
+export class DigestMismatchError extends AppError {
+  public readonly code = ERROR_CODES.DIGEST_MISMATCH;
+  public readonly httpStatus = 401;
+
+  public constructor() {
+    super('The content digest does not match the request body.');
   }
 }
 

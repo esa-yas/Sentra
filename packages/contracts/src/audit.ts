@@ -61,7 +61,9 @@ export const AUDIT_ACTIONS = {
   PARTNER_CONNECTION_UPDATED: 'partner_connection.updated',
   PARTNER_SECRET_ROTATED: 'partner_connection.secret_rotated',
   PARTNER_SIGNING_KEY_REGISTERED: 'partner_signing_key.registered',
+  PARTNER_SIGNING_KEY_ROTATED: 'partner_signing_key.rotated',
   PARTNER_SIGNING_KEY_REVOKED: 'partner_signing_key.revoked',
+  PARTNER_CONNECTION_REVOKED: 'partner_connection.revoked',
   PARTNER_TOKEN_ISSUED: 'partner_token.issued',
   PARTNER_TOKEN_REJECTED: 'partner_token.rejected',
   AUTHORIZATION_DENIED: 'authorization.denied',
@@ -85,6 +87,11 @@ export const RESOURCE_TYPES = {
   RETENTION_POLICY: 'retention_policy',
   RETENTION_RUN: 'retention_run',
   IDEMPOTENCY_KEY: 'idempotency_key',
+  TELECOM_RISK_EVENT: 'telecom_risk_event',
+  PAYMENT_INTENT: 'payment_intent',
+  BANK_OUTCOME: 'bank_outcome',
+  RECOMMENDATION: 'recommendation',
+  CORRELATION_CASE: 'correlation_case',
 } as const;
 
 export type ResourceType = (typeof RESOURCE_TYPES)[keyof typeof RESOURCE_TYPES] | (string & {});

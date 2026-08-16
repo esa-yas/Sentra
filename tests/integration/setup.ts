@@ -41,6 +41,7 @@ const ALL_TABLES = [
   'bank_outcomes',
   'notification_records',
   'operational_events',
+  'partner_api_requests',
 ] as const;
 
 export const resetDatabase = async (): Promise<void> => {

@@ -22,7 +22,7 @@ Follow this loop for every schema change. Never edit the database by hand.
 1. Edit `packages/db/prisma/schema.prisma`.
 2. Generate a versioned migration **without applying it**, so you can review the SQL:
    ```bash
-   pnpm --filter @sentra/db exec node scripts/with-root-env.mjs \
+   pnpm --filter @sentra/db exec tsx scripts/with-root-env.ts \
      prisma migrate dev --name <change_name> --create-only
    ```
 3. Review the generated `migration.sql`. Confirm it is standard PostgreSQL (no
@@ -294,13 +294,40 @@ Run the SQL spot checks in §6 in the Supabase SQL Editor, and/or:
 pnpm --filter @sentra/db run status   # migration history matches
 ```
 
-### 8. Test the application's database connection
+### 8. Local development startup
+
+Keep **one** `.env` at the repository root (copy `.env.example`). Do not copy it into
+`apps/api`, `apps/worker`, or `apps/web`. `@sentra/config` walks up to `pnpm-workspace.yaml`
+and loads that file, so `pnpm --filter` changing the working directory cannot pick the wrong
+place. Shell and CI variables always override the file. Production never reads `.env`; the
+platform environment is the only source.
+
+Canonical commands, from the repository root:
 
 ```bash
-# Quick connectivity + schema check against the configured database:
+pnpm dev:infra                 # local Postgres + Redis, if you are not using remote URLs
+SENTRA_PROVIDER_MODE=real pnpm dev:api
+SENTRA_PROVIDER_MODE=real pnpm dev:worker
+pnpm dev:web                   # console on http://localhost:3001
+# Or everything together:
+SENTRA_PROVIDER_MODE=real pnpm dev
+```
+
+Prisma (same root `.env`):
+
+```bash
 pnpm --filter @sentra/db run status
-# Or start the API and hit readiness (checks the DB dependency):
-pnpm dev:api    # then: curl -s localhost:3000/ready
+pnpm db:migrate
+pnpm db:seed
+```
+
+Readiness after the API is up:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/ready
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/operations/queues
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/operations/partners
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/operations/api-activity
 ```
 
 ### 9. Confirm audit, transaction, and outbox behaviour

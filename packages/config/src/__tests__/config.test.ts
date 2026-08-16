@@ -160,9 +160,9 @@ describe('loadConfig in production', () => {
     ).toEqual(expect.arrayContaining([expect.stringContaining('TLS')]));
   });
 
-  it('requires an https partner token issuer', () => {
-    expect(problemsOf({ ...productionEnv, PARTNER_TOKEN_ISSUER: 'http://api.sentra.example' })).toEqual(
-      expect.arrayContaining([expect.stringContaining('https')]),
+  it('refuses to boot when partner credential bootstrap is enabled', () => {
+    expect(problemsOf({ ...productionEnv, PARTNER_BOOTSTRAP_ENABLED: 'true' })).toEqual(
+      expect.arrayContaining([expect.stringContaining('PARTNER_BOOTSTRAP_ENABLED')]),
     );
   });
 });

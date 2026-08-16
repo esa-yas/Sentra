@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { FlowRun, FlowStageResult } from '@sentra/contracts';
+import type { FlowRun, FlowStageResult, OutboxEventView } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge, CorrelationTag, EmptyState, Panel } from '@/components/ui';
-import { getFlow, getLatestFlow } from '@/lib/api';
+import { getEvents, getFlow, getLatestFlow, getOutbox } from '@/lib/api';
 import { flowStatusClass } from '@/lib/theme';
 import { formatMs } from '@/lib/format';
 
@@ -134,9 +134,104 @@ function SystemFlowInner() {
               <StageDetail stage={selectedStage} />
             )}
           </Panel>
+
+          <div className="lg:col-span-2">
+            <DeliveryPanel correlationId={flow.correlationId} />
+          </div>
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Durable-delivery trail for the selected case. Every state is derived from real persisted
+ * data — the outbox row status and the worker's delivery operational event — never a
+ * hardcoded animation.
+ */
+function DeliveryPanel({ correlationId }: { correlationId: string }) {
+  const [event, setEvent] = useState<OutboxEventView | null>(null);
+  const [delivered, setDelivered] = useState(false);
+  const [configured, setConfigured] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const [outboxResult, eventsResult] = await Promise.all([
+        getOutbox({ correlationId, limit: 5 }),
+        getEvents({ type: 'notification.dispatched', limit: 200 }),
+      ]);
+      if (!active) {
+        return;
+      }
+      const match = outboxResult.data?.items.find((item) => item.eventType === 'recommendation.issued') ?? null;
+      setEvent(match);
+      setConfigured(outboxResult.ok);
+      const done = (eventsResult.data?.items ?? []).some(
+        (item) => item.correlationId === correlationId && item.provider === 'worker.recommendation-events',
+      );
+      setDelivered(done);
+    };
+    void load();
+    const timer = setInterval(() => void load(), 3500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [correlationId]);
+
+  const status = event?.status ?? null;
+  const failed = status === 'FAILED' || status === 'DEAD_LETTER';
+
+  const stages: { label: string; module: string; done: boolean; failed?: boolean }[] = [
+    { label: 'Recommendation persisted', module: 'core/decision → PostgreSQL', done: event !== null },
+    { label: 'Outbox pending', module: 'transactional outbox (committed)', done: event !== null },
+    {
+      label: 'Outbox claimed',
+      module: 'publisher · FOR UPDATE SKIP LOCKED',
+      done: status === 'PUBLISHING' || status === 'PUBLISHED' || event?.claimedAt != null,
+      failed,
+    },
+    { label: 'BullMQ published', module: 'recommendation-events queue', done: status === 'PUBLISHED' },
+    { label: 'Worker processing', module: 'BullMQ consumer (idempotent)', done: status === 'PUBLISHED' },
+    { label: 'Consumer completed', module: 'inbox-guarded delivery record', done: delivered },
+  ];
+
+  return (
+    <Panel
+      title="Durable delivery"
+      description="At-least-once delivery of the recommendation.issued event. State reflects the real outbox row and the worker's delivery record."
+    >
+      {!configured ? (
+        <EmptyState title="Not available" description="Durable delivery is not wired in this provider mode." />
+      ) : event === null ? (
+        <EmptyState
+          title="No outbox event yet"
+          description="This run has no recommendation.issued outbox row. In real mode a synthetic evaluation commits one."
+        />
+      ) : (
+        <ol className="grid gap-2 md:grid-cols-3">
+          {stages.map((stage, index) => {
+            const state = stage.failed === true ? 'FAILED' : stage.done ? 'COMPLETED' : 'PENDING';
+            return (
+              <li
+                key={stage.label}
+                className={`rounded-lg border px-4 py-3 ${flowStatusClass[state]}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] tabular-nums">
+                    {index + 1}
+                  </span>
+                  <p className="text-sm font-medium">{stage.label}</p>
+                </div>
+                <p className="mt-1 text-xs opacity-70">{stage.module}</p>
+                <p className="mt-1 text-[10px] uppercase tracking-wide">{state}</p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Panel>
   );
 }
 

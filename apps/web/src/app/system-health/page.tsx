@@ -71,7 +71,7 @@ export default function SystemHealthPage() {
             <StatCard label="Uptime" value={`${Math.round(health.uptimeSeconds)}s`} />
           </div>
 
-          <Panel title="Readiness dependencies" description="Reported by /ready. Real mode checks PostgreSQL connectivity.">
+          <Panel title="Readiness dependencies" description="Reported by /ready. API readiness requires PostgreSQL; Redis, the queue, and the worker are surfaced on Integrations so a Redis outage never makes the read-only console unavailable.">
             {readiness === null || readiness.dependencies.length === 0 ? (
               <EmptyState title="No dependencies" description="The readiness probe reported no external dependencies." />
             ) : (

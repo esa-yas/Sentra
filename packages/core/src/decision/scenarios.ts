@@ -7,6 +7,7 @@ import {
 } from '@sentra/contracts';
 
 export const SYNTHETIC_BANK_SLUG = 'bank-sandbox';
+export const SYNTHETIC_TELECOM_SLUG = 'telco-sandbox';
 export const SYNTHETIC_DEMO_SUBJECT_REF = 'subj_seed_payer_00000000001';
 export const SIMULATOR_SCENARIOS: readonly SimulatorScenario[] = [
   {

@@ -23,6 +23,11 @@ export type {
   QueueConsumerHandle,
   QueueConsumerOptions,
   EnqueueOptions,
+  QueueInspector,
+  QueueJobLifecycle,
+  RawQueueJob,
+  RawQueueHealth,
+  RawQueueJobCounts,
 } from './queue-provider';
 
 export {
@@ -122,11 +127,24 @@ export type {
   OutboxRepository,
   EnqueueOutboxEventInput,
   InboxRepository,
+  OperationalEventWriter,
+  RecordOperationalEventInput,
+  QueueOutboxReadModel,
+  OutboxListFilter,
+  OutboxStatusCounts,
   IdempotencyRepository,
   IdempotencyClaim,
+  PartnerApiActivityStore,
+  PartnerApiActivityFilter,
+  PartnerApiRequestRecord,
+  RecordPartnerApiRequestInput,
+  PartnerCheckResult,
+  PartnerDirectoryReadModel,
   RetentionRepository,
   CreateRetentionPolicyInput,
 } from './repositories';
+
+export { PARTNER_CHECK_RESULTS } from './repositories';
 
 export {
   CONSENT_LOOKUP_STATUSES,

@@ -1,6 +1,6 @@
 import { HTTP_HEADERS } from '@sentra/contracts';
 import cors from 'cors';
-import express, { type Express } from 'express';
+import express, { type Express, type Request } from 'express';
 import helmet from 'helmet';
 import type { Container } from './container';
 import { correlationMiddleware } from './middleware/correlation';
@@ -10,6 +10,8 @@ import { requestMetricsMiddleware } from './middleware/request-metrics';
 import { createHealthRouter } from './routes/health';
 import { createOperationsRouter } from './routes/operations';
 import { createSimulatorRouter } from './routes/simulator';
+import { createPartnerAdminRouter } from './routes/v1-admin';
+import { createPartnerIngestRouter } from './routes/v1-ingest';
 
 /**
  * Builds the Express application from an assembled {@link Container}. Kept separate from
@@ -26,10 +28,17 @@ export const createApp = (container: Container): Express => {
   app.use(
     cors({
       origin: config.api.corsAllowedOrigins.length > 0 ? [...config.api.corsAllowedOrigins] : true,
-      exposedHeaders: [HTTP_HEADERS.CORRELATION_ID],
+      exposedHeaders: [HTTP_HEADERS.CORRELATION_ID, HTTP_HEADERS.RETRY_AFTER],
     }),
   );
-  app.use(express.json({ limit: config.api.bodyLimitBytes }));
+  app.use(
+    express.json({
+      limit: config.api.bodyLimitBytes,
+      verify: (req, _res, buf) => {
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      },
+    }),
+  );
 
   app.use(correlationMiddleware());
   app.use(requestLoggingMiddleware(logger, clock));
@@ -38,6 +47,8 @@ export const createApp = (container: Container): Express => {
   app.use('/', createHealthRouter(container));
   app.use('/api/simulator', createSimulatorRouter(container));
   app.use('/api', createOperationsRouter(container));
+  app.use('/v1', createPartnerAdminRouter(container));
+  app.use('/v1', createPartnerIngestRouter(container));
 
   app.use(notFoundHandler());
   app.use(errorHandler(container.logger));

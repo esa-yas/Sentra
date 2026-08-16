@@ -5,6 +5,7 @@ import type {
   OrganizationType,
   PartnerConnectionKind,
   PartnerConnectionStatus,
+  PartnerEnvironment,
   PartnerScope,
   Purpose,
   RetentionAction,
@@ -174,6 +175,7 @@ export interface CreatePartnerConnectionInput {
   readonly organizationId: string;
   readonly name: string;
   readonly kind: PartnerConnectionKind;
+  readonly environment: PartnerEnvironment;
   readonly clientId: string;
   readonly clientSecretHash: string;
   readonly scopes: readonly PartnerScope[];
@@ -197,6 +199,8 @@ export interface PartnerConnectionRepository {
     id: string,
     scope?: TransactionScope,
   ): Promise<PartnerConnectionRecord | null>;
+  /** Unscoped lookup used by the signed-request authenticator after the connection id is presented. */
+  findByIdUnscoped(id: string, scope?: TransactionScope): Promise<PartnerConnectionRecord | null>;
   /**
    * Looks a connection up by client identifier for the token endpoint, which has no tenant
    * context yet. Returns the secret hash, so this is the only unscoped read available.
@@ -224,6 +228,7 @@ export interface PartnerConnectionRepository {
     status: PartnerConnectionStatus,
     scope?: TransactionScope,
   ): Promise<PartnerConnectionRecord>;
+  touchLastUsed(id: string, at: Date): Promise<void>;
 }
 
 export interface RegisterSigningKeyInput {
@@ -249,6 +254,15 @@ export interface PartnerSigningKeyRepository {
     kid: string,
     scope?: TransactionScope,
   ): Promise<PartnerSigningKeyRecord | null>;
+  /**
+   * Returns the key regardless of status so the verifier can distinguish unknown from
+   * revoked/retired rather than collapsing both into UNKNOWN_KEY.
+   */
+  findByOrganizationAndKid(
+    organizationId: string,
+    kid: string,
+    scope?: TransactionScope,
+  ): Promise<PartnerSigningKeyRecord | null>;
   listForConnection(
     organizationId: string,
     partnerConnectionId: string,
@@ -260,6 +274,7 @@ export interface PartnerSigningKeyRepository {
     revokedAt: Date,
     scope?: TransactionScope,
   ): Promise<PartnerSigningKeyRecord>;
+  touchLastUsed(id: string, at: Date): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,6 +400,71 @@ export interface OutboxRepository {
   deletePublishedBefore(before: Date, limit: number): Promise<number>;
 }
 
+/**
+ * Records a durable operational event (the live-events projection). Used by the queue
+ * consumer to persist a safe, internal delivery record inside the same transaction that
+ * marks the inbox entry processed, so the side effect and the dedup marker commit together.
+ */
+export interface RecordOperationalEventInput {
+  readonly id: string;
+  readonly organizationId: string | null;
+  readonly type: string;
+  readonly severity: string;
+  readonly status: string;
+  readonly actor: string;
+  readonly subjectRef: string | null;
+  readonly provider: string;
+  readonly attempt: number;
+  readonly durationMs: number | null;
+  readonly synthetic: boolean;
+  readonly payloadPreview: Record<string, unknown>;
+  readonly correlationId: string;
+  readonly occurredAt: Date;
+}
+
+export interface OperationalEventWriter {
+  record(input: RecordOperationalEventInput, scope: TransactionScope): Promise<void>;
+}
+
+/**
+ * Read/light-write surface over the outbox for the operations console. Kept separate from
+ * {@link OutboxRepository} (which the publisher owns) so the console cannot reach into the
+ * publisher's claim/publish lifecycle. Listing is cursor-paginated with bounded page sizes.
+ */
+export interface OutboxListFilter {
+  readonly status?: OutboxEventRecord['status'];
+  readonly eventType?: string;
+  readonly correlationId?: string;
+  readonly createdAfter?: Date;
+  readonly createdBefore?: Date;
+}
+
+export interface OutboxStatusCounts {
+  readonly pending: number;
+  readonly publishing: number;
+  readonly published: number;
+  readonly failed: number;
+  readonly deadLetter: number;
+}
+
+export interface QueueOutboxReadModel {
+  listOutbox(
+    filter: OutboxListFilter,
+    pagination: Pagination,
+  ): Promise<PagedResult<OutboxEventRecord>>;
+  getOutbox(eventId: string): Promise<OutboxEventRecord | null>;
+  statusCounts(): Promise<OutboxStatusCounts>;
+  /** Age of the oldest still-pending row in milliseconds, or null when none is pending. */
+  oldestPendingAgeMs(now: Date): Promise<number | null>;
+  /** Resolves safe display labels (slug) for a set of organization ids. */
+  organizationLabels(ids: readonly string[]): Promise<ReadonlyMap<string, string>>;
+  /**
+   * Development-only: returns a committed row to PENDING so the publisher re-claims it.
+   * Returns null when the event does not exist. Intended for synthetic records only.
+   */
+  resetToPending(eventId: string, now: Date): Promise<OutboxEventRecord | null>;
+}
+
 export interface InboxRepository {
   /**
    * Records that a message has been handled. Returns false when the identifier was already
@@ -446,6 +526,91 @@ export interface IdempotencyRepository {
   release(id: string): Promise<void>;
 
   deleteExpired(before: Date, limit: number): Promise<number>;
+}
+
+export const PARTNER_CHECK_RESULTS = {
+  PASSED: 'PASSED',
+  FAILED: 'FAILED',
+  MISSING: 'MISSING',
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
+} as const;
+
+export type PartnerCheckResult = (typeof PARTNER_CHECK_RESULTS)[keyof typeof PARTNER_CHECK_RESULTS];
+
+export interface RecordPartnerApiRequestInput {
+  readonly id: string;
+  readonly organizationId: string | null;
+  readonly partnerConnectionId: string | null;
+  readonly endpoint: string;
+  readonly method: string;
+  readonly statusCode: number;
+  readonly durationMs: number;
+  readonly correlationId: string;
+  readonly authentication: PartnerCheckResult;
+  readonly signature: PartnerCheckResult;
+  readonly replay: PartnerCheckResult;
+  readonly idempotency: PartnerCheckResult;
+  readonly rateLimit: PartnerCheckResult;
+  readonly errorCode: string | null;
+  readonly environment: 'SANDBOX' | 'PRODUCTION' | 'UNKNOWN';
+  readonly synthetic: boolean;
+  readonly occurredAt: Date;
+}
+
+export interface PartnerApiActivityFilter {
+  readonly organizationId?: string;
+  readonly partnerConnectionId?: string;
+  readonly endpoint?: string;
+  readonly method?: string;
+  readonly statusCode?: number;
+  readonly correlationId?: string;
+  readonly environment?: 'SANDBOX' | 'PRODUCTION';
+}
+
+export interface PartnerApiRequestRecord {
+  readonly id: string;
+  readonly organizationId: string | null;
+  readonly partnerConnectionId: string | null;
+  readonly endpoint: string;
+  readonly method: string;
+  readonly statusCode: number;
+  readonly durationMs: number;
+  readonly correlationId: string;
+  readonly authentication: PartnerCheckResult;
+  readonly signature: PartnerCheckResult;
+  readonly replay: PartnerCheckResult;
+  readonly idempotency: PartnerCheckResult;
+  readonly rateLimit: PartnerCheckResult;
+  readonly errorCode: string | null;
+  readonly environment: 'SANDBOX' | 'PRODUCTION' | 'UNKNOWN';
+  readonly synthetic: boolean;
+  readonly occurredAt: Date;
+}
+
+export interface PartnerApiActivityStore {
+  record(input: RecordPartnerApiRequestInput): Promise<void>;
+  list(
+    filter: PartnerApiActivityFilter,
+    pagination: Pagination,
+  ): Promise<PagedResult<PartnerApiRequestRecord>>;
+  recentFailureCount(partnerConnectionId: string, since: Date): Promise<number>;
+}
+
+export interface PartnerDirectoryReadModel {
+  listConnections(filter: {
+    readonly organizationId?: string;
+    readonly kind?: PartnerConnectionRecord['kind'];
+    readonly status?: PartnerConnectionRecord['status'];
+    readonly environment?: PartnerConnectionRecord['environment'];
+  }, pagination: Pagination): Promise<PagedResult<PartnerConnectionRecord>>;
+  organizationLabels(ids: readonly string[]): Promise<ReadonlyMap<string, string>>;
+  organizationById(id: string): Promise<{
+    readonly id: string;
+    readonly slug: string;
+    readonly type: OrganizationType;
+    readonly status: OrganizationStatus;
+  } | null>;
+  listOrganizationsByType(type: OrganizationType): Promise<readonly { id: string; slug: string }[]>;
 }
 
 // ---------------------------------------------------------------------------

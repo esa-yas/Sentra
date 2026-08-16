@@ -3,13 +3,14 @@ import { SIGNATURE_FAILURE_REASONS } from '@sentra/ports';
 
 export interface SignatureVerifierContractHarness {
   readonly verifier: {
-    verify: (input: {
-      organizationId: string;
-      keyId: string;
-      payload: Uint8Array;
-      signature: string;
-      signedAt: Date;
-    }) => Promise<
+      verify: (input: {
+        organizationId: string;
+        partnerConnectionId: string;
+        keyId: string;
+        payload: Uint8Array;
+        signature: string;
+        signedAt: Date;
+      }) => Promise<
       | { valid: true; keyId: string; algorithm: string }
       | { valid: false; reason: string }
     >;
@@ -44,6 +45,7 @@ export const describeSignatureVerifierContract = (
 
       const result = await harness.verifier.verify({
         organizationId,
+        partnerConnectionId: '01K2ABCDEFGHJKMNPQRSTVWX01',
         keyId,
         payload,
         signature,
@@ -58,6 +60,7 @@ export const describeSignatureVerifierContract = (
 
       const result = await harness.verifier.verify({
         organizationId,
+        partnerConnectionId: '01K2ABCDEFGHJKMNPQRSTVWX01',
         keyId: 'missing-key',
         payload,
         signature: 'deadbeef',
@@ -76,6 +79,7 @@ export const describeSignatureVerifierContract = (
 
       const result = await harness.verifier.verify({
         organizationId,
+        partnerConnectionId: '01K2ABCDEFGHJKMNPQRSTVWX01',
         keyId,
         payload,
         signature: 'not-a-valid-signature-value',
@@ -96,6 +100,7 @@ export const describeSignatureVerifierContract = (
 
       const result = await harness.verifier.verify({
         organizationId,
+        partnerConnectionId: '01K2ABCDEFGHJKMNPQRSTVWX01',
         keyId,
         payload,
         signature,

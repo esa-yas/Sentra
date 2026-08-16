@@ -1,4 +1,4 @@
-import { SYNTHETIC_BANK_SLUG, SYNTHETIC_DEMO_SUBJECT_REF } from '@sentra/core';
+import { SYNTHETIC_BANK_SLUG, SYNTHETIC_DEMO_SUBJECT_REF, SYNTHETIC_TELECOM_SLUG } from '@sentra/core';
 import { createNullLogger } from '@sentra/observability';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app';
@@ -50,9 +50,14 @@ describe('API real provider mode', () => {
 
   it('evaluates, persists, and remains visible after a new container is built', async () => {
     const organizationId = await createOrganization('BANK');
+    const telecomId = await createOrganization('TELECOM');
     await prisma.organization.update({
       where: { id: organizationId },
       data: { slug: SYNTHETIC_BANK_SLUG },
+    });
+    await prisma.organization.update({
+      where: { id: telecomId },
+      data: { slug: SYNTHETIC_TELECOM_SLUG },
     });
     await prisma.consentRecord.create({
       data: {

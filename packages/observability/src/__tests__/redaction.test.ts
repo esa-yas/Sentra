@@ -84,6 +84,18 @@ describe('redact', () => {
     expect(result.accessToken).toBe(REDACTED);
   });
 
+  it('redacts partner signatures and private keys by field name', () => {
+    const result = redact({
+      'x-sentra-signature': 'eyJhbGciOiJFUzI1NiJ9.aaa.bbb',
+      privateKey: '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----',
+      authorization: 'Bearer abc',
+    }) as Record<string, unknown>;
+
+    expect(result['x-sentra-signature']).toBe(REDACTED);
+    expect(result.privateKey).toBe(REDACTED);
+    expect(result.authorization).toBe(REDACTED);
+  });
+
   it('matches a sensitive suffix in a longer field name', () => {
     const result = redact({ partnerClientSecret: 'x', supabaseServiceRoleKey: 'y' }) as Record<string, unknown>;
 

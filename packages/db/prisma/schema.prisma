@@ -89,7 +89,13 @@ enum PartnerScope {
   PAYMENT_INTENTS_WRITE
   RISK_EVENTS_WRITE
   RECOMMENDATIONS_READ
+  CASES_READ
   OUTCOMES_WRITE
+}
+
+enum PartnerEnvironment {
+  SANDBOX
+  PRODUCTION
 }
 
 enum SigningKeyStatus {
@@ -189,6 +195,7 @@ model Organization {
   bankOutcomes      BankOutcome[]
   notifications     NotificationRecord[]
   operationalEvents OperationalEvent[]
+  partnerApiRequests PartnerApiRequest[]
 
   @@index([type, status])
   @@map("organizations")
@@ -278,6 +285,7 @@ model PartnerConnection {
   organizationId   String
   name             String
   kind             PartnerConnectionKind
+  environment      PartnerEnvironment      @default(SANDBOX)
   clientId         String                  @unique
   clientSecretHash String
   scopes           PartnerScope[]
@@ -288,6 +296,7 @@ model PartnerConnection {
   status           PartnerConnectionStatus @default(ACTIVE)
 
   lastRotatedAt DateTime?
+  lastUsedAt    DateTime?
   /// When the credential should next be rotated, surfaced in the console.
   rotationDueAt DateTime?
 
@@ -300,9 +309,11 @@ model PartnerConnection {
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   signingKeys  PartnerSigningKey[]
+  apiRequests  PartnerApiRequest[]
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
+  @@index([environment, status])
   @@map("partner_connections")
 }
 
@@ -323,6 +334,7 @@ model PartnerSigningKey {
   notAfter            DateTime?
 
   createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime?
   revokedAt     DateTime?
   createdBy     String?
   schemaVersion Int       @default(1)
@@ -1077,4 +1089,48 @@ model OperationalEvent {
   @@index([organizationId, occurredAt(sort: Desc)])
   @@index([expiresAt])
   @@map("operational_events")
+}
+
+/// Per-request security-operational log for the API Activity dashboard.
+///
+/// This is deliberately NOT the canonical hash-chained audit table. Unauthenticated
+/// garbage is bounded here so attackers cannot flood the high-value audit chain.
+/// Authenticated security actions (create, rotate, revoke, successful ingest) are also
+/// recorded on the canonical chain.
+model PartnerApiRequest {
+  id             String  @id
+  organizationId String?
+  partnerConnectionId String?
+
+  endpoint   String
+  method     String
+  statusCode Int
+  durationMs Int
+
+  correlationId String
+
+  authentication String
+  signature      String
+  replay         String
+  idempotency    String
+  rateLimit      String
+
+  errorCode   String?
+  environment String
+  synthetic   Boolean  @default(true)
+
+  occurredAt    DateTime
+  recordedAt    DateTime @default(now())
+  schemaVersion Int      @default(1)
+
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  partnerConnection PartnerConnection? @relation(fields: [partnerConnectionId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([correlationId])
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@index([partnerConnectionId, occurredAt(sort: Desc)])
+  @@index([endpoint, method])
+  @@index([statusCode])
+  @@map("partner_api_requests")
 }

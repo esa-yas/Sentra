@@ -1,13 +1,23 @@
 import {
+  ForbiddenError,
   NotFoundError,
+  PARTNER_CONNECTION_KINDS,
+  createPartnerConnectionRequestSchema,
   developmentStatusSchema,
   eventListQuerySchema,
+  outboxListQuerySchema,
+  partnerApiActivityQuerySchema,
+  partnerConnectionListQuerySchema,
+  queueJobListQuerySchema,
+  sandboxSignedRequestSchema,
   type DevelopmentStatus,
   type FlowRun,
+  type ProviderHealth,
 } from '@sentra/contracts';
 import { getCorrelationId } from '@sentra/observability';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import type { Container } from '../container';
+import { QueueActionRejected } from '../queue-admin';
 import { parseOrThrow } from '../validation';
 
 /**
@@ -16,14 +26,86 @@ import { parseOrThrow } from '../validation';
  */
 export const createOperationsRouter = (container: Container): Router => {
   const router = Router();
-  const { store, config } = container;
+  const { store, config, queueAdmin } = container;
 
   router.get('/operations/summary', async (_req, res) => {
     res.json(await store.summary(config.runtime.nodeEnv));
   });
 
   router.get('/operations/integrations', async (_req, res) => {
-    res.json({ items: await store.providers() });
+    const base = await store.providers();
+    const health = await queueAdmin.providerHealth();
+    // Replace the placeholder CACHE/QUEUE rows with the real Redis/BullMQ health, and add the
+    // worker and publisher rows so the console reflects the full durable-delivery topology.
+    const withoutPlaceholders = base.filter(
+      (provider: ProviderHealth) => provider.kind !== 'CACHE' && provider.kind !== 'QUEUE',
+    );
+    res.json({
+      items: [
+        ...withoutPlaceholders,
+        health.redis,
+        health.queueTransport,
+        health.worker,
+        health.publisher,
+      ],
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Queue Monitor (Slice 3 durable delivery)
+  // -------------------------------------------------------------------------
+
+  router.get('/operations/queues', async (_req, res) => {
+    res.json(await queueAdmin.monitorSummary());
+  });
+
+  router.get('/operations/queues/:queueName', async (req, res) => {
+    res.json(await queueAdmin.queueHealth(req.params.queueName));
+  });
+
+  router.get('/operations/queues/:queueName/jobs', async (req, res) => {
+    const query = parseOrThrow(queueJobListQuerySchema, req.query);
+    res.json(await queueAdmin.listJobs(req.params.queueName, query));
+  });
+
+  router.get('/operations/outbox', async (req, res) => {
+    const query = parseOrThrow(outboxListQuerySchema, req.query);
+    res.json(await queueAdmin.listOutbox(query));
+  });
+
+  router.get('/operations/outbox/:eventId', async (req, res) => {
+    const event = await queueAdmin.getOutbox(req.params.eventId);
+    if (event === null) {
+      throw new NotFoundError('outbox event', req.params.eventId);
+    }
+    res.json(event);
+  });
+
+  // Development-only safe actions. Refused in production; operate on synthetic records only.
+  const runAction = async (res: Response, action: () => Promise<unknown>): Promise<void> => {
+    try {
+      res.json(await action());
+    } catch (error) {
+      if (error instanceof QueueActionRejected) {
+        res.status(403).json({ error: 'forbidden', message: error.message });
+        return;
+      }
+      throw error;
+    }
+  };
+
+  router.post('/operations/queues/:queueName/jobs/:jobId/retry', async (req, res) => {
+    await runAction(res, () =>
+      queueAdmin.retryJob(req.params.queueName, req.params.jobId, getCorrelationId()),
+    );
+  });
+
+  router.post('/operations/outbox/:eventId/replay', async (req, res) => {
+    await runAction(res, () => queueAdmin.replayOutbox(req.params.eventId, getCorrelationId()));
+  });
+
+  router.post('/operations/outbox/:eventId/duplicate', async (req, res) => {
+    await runAction(res, () => queueAdmin.duplicateDelivery(req.params.eventId, getCorrelationId()));
   });
 
   router.get('/events', async (req, res) => {
@@ -66,6 +148,189 @@ export const createOperationsRouter = (container: Container): Router => {
       throw new NotFoundError('flow', req.params.correlationId);
     }
     res.json(flow);
+  });
+
+  router.get('/operations/api-activity', async (req, res) => {
+    if (container.partner === undefined) {
+      res.json({ items: [], degraded: true, detail: 'Partner API activity requires real provider mode.' });
+      return;
+    }
+    const query = parseOrThrow(partnerApiActivityQuerySchema, req.query);
+    const listed = await container.partner.activity.list(
+      {
+        ...(query.organizationId === undefined ? {} : { organizationId: query.organizationId }),
+        ...(query.partnerConnectionId === undefined ? {} : { partnerConnectionId: query.partnerConnectionId }),
+        ...(query.endpoint === undefined ? {} : { endpoint: query.endpoint }),
+        ...(query.method === undefined ? {} : { method: query.method.toUpperCase() }),
+        ...(query.status === undefined ? {} : { statusCode: query.status }),
+        ...(query.correlationId === undefined ? {} : { correlationId: query.correlationId }),
+        ...(query.environment === undefined ? {} : { environment: query.environment }),
+      },
+      { limit: query.limit, ...(query.cursor === undefined ? {} : { cursor: query.cursor }) },
+    );
+    const orgIds = [...new Set(listed.items.map((item) => item.organizationId).filter((id): id is string => id !== null))];
+    const partnerIds = [
+      ...new Set(listed.items.map((item) => item.partnerConnectionId).filter((id): id is string => id !== null)),
+    ];
+    const orgLabels = await container.partner.directory.organizationLabels(orgIds);
+    const partnerLabels = new Map<string, string>();
+    await Promise.all(
+      partnerIds.map(async (id) => {
+        const connection = await container.partner!.connections.findByIdUnscoped(id);
+        if (connection !== null) {
+          partnerLabels.set(id, connection.name);
+        }
+      }),
+    );
+    const redis = await queueAdmin.providerHealth();
+    res.json({
+      items: listed.items.map((item) => ({
+        id: item.id,
+        occurredAt: item.occurredAt.toISOString(),
+        organizationId: item.organizationId,
+        organizationLabel: item.organizationId === null ? null : (orgLabels.get(item.organizationId) ?? null),
+        partnerConnectionId: item.partnerConnectionId,
+        partnerLabel: item.partnerConnectionId === null ? null : (partnerLabels.get(item.partnerConnectionId) ?? null),
+        endpoint: item.endpoint,
+        method: item.method,
+        statusCode: item.statusCode,
+        durationMs: item.durationMs,
+        correlationId: item.correlationId,
+        authentication: item.authentication,
+        signature: item.signature,
+        replay: item.replay,
+        idempotency: item.idempotency,
+        rateLimit: item.rateLimit,
+        errorCode: item.errorCode,
+        environment: item.environment,
+        synthetic: item.synthetic,
+      })),
+      ...(listed.nextCursor === undefined ? {} : { nextCursor: listed.nextCursor }),
+      redisState: redis.redis.state,
+    });
+  });
+
+  router.get('/operations/partners', async (req, res) => {
+    if (container.partner === undefined) {
+      res.json({ items: [], degraded: true, detail: 'Partner directory requires real provider mode.' });
+      return;
+    }
+    const query = parseOrThrow(partnerConnectionListQuerySchema, req.query);
+    const listed = await container.partner.directory.listConnections(
+      {
+        ...(query.organizationId === undefined ? {} : { organizationId: query.organizationId }),
+        ...(query.kind === undefined ? {} : { kind: query.kind }),
+        ...(query.status === undefined ? {} : { status: query.status }),
+        ...(query.environment === undefined ? {} : { environment: query.environment }),
+      },
+      { limit: query.limit, ...(query.cursor === undefined ? {} : { cursor: query.cursor }) },
+    );
+    const orgLabels = await container.partner.directory.organizationLabels(
+      listed.items.map((item) => item.organizationId),
+    );
+    const since = new Date(container.clock.now().getTime() - 24 * 60 * 60 * 1000);
+    const items = await Promise.all(
+      listed.items.map(async (connection) => {
+        const keys = await container.partner!.keys.listForConnection(connection.organizationId, connection.id);
+        const active = keys.filter((key) => key.status === 'ACTIVE');
+        const expiries = active
+          .map((key) => key.notAfter)
+          .filter((value): value is Date => value !== null)
+          .sort((a, b) => a.getTime() - b.getTime());
+        const recentFailures = await container.partner!.activity.recentFailureCount(connection.id, since);
+        return {
+          id: connection.id,
+          organizationId: connection.organizationId,
+          organizationLabel: orgLabels.get(connection.organizationId) ?? connection.organizationId,
+          name: connection.name,
+          kind: connection.kind,
+          environment: connection.environment,
+          status: connection.status,
+          scopes: [...connection.scopes],
+          activeKeyIds: active.map((key) => key.kid),
+          keyExpiresAt: expiries[0]?.toISOString() ?? null,
+          lastUsedAt: connection.lastUsedAt?.toISOString() ?? null,
+          recentFailures,
+          createdAt: connection.createdAt.toISOString(),
+        };
+      }),
+    );
+    res.json({
+      items,
+      ...(listed.nextCursor === undefined ? {} : { nextCursor: listed.nextCursor }),
+      bootstrapEnabled: container.config.partnerBootstrap.enabled && !container.config.runtime.isProduction,
+    });
+  });
+
+  const refuseProductionAdmin = (): void => {
+    if (container.config.runtime.isProduction) {
+      throw new ForbiddenError(
+        'Partner credential administration is not available in production. Slice 4B adds authenticated human administrators.',
+      );
+    }
+  };
+
+  router.post('/operations/partners', async (req, res) => {
+    refuseProductionAdmin();
+    if (container.partner === undefined) {
+      throw new ForbiddenError('Partner administration requires real provider mode.');
+    }
+    const input = parseOrThrow(createPartnerConnectionRequestSchema, req.body ?? {});
+    const organizationId =
+      input.kind === PARTNER_CONNECTION_KINDS.TELECOM_EVENTS
+        ? container.partner.telecomOrganizationId
+        : container.partner.bankOrganizationId;
+    const created = await container.partner.admin.createConnection(organizationId, input, 'operations-console');
+    res.status(201).json(created);
+  });
+
+  router.post('/operations/partners/:connectionId/keys', async (req, res) => {
+    refuseProductionAdmin();
+    if (container.partner === undefined) {
+      throw new ForbiddenError('Partner administration requires real provider mode.');
+    }
+    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    if (connection === null) {
+      throw new NotFoundError('partner connection', req.params.connectionId);
+    }
+    const issued = await container.partner.admin.issueKey(connection.organizationId, connection.id);
+    res.status(201).json(issued);
+  });
+
+  router.post('/operations/partners/:connectionId/keys/:kid/revoke', async (req, res) => {
+    refuseProductionAdmin();
+    if (container.partner === undefined) {
+      throw new ForbiddenError('Partner administration requires real provider mode.');
+    }
+    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    if (connection === null) {
+      throw new NotFoundError('partner connection', req.params.connectionId);
+    }
+    await container.partner.admin.revokeKey(connection.organizationId, connection.id, req.params.kid);
+    res.json({ revoked: true, correlationId: getCorrelationId() });
+  });
+
+  router.post('/operations/partners/:connectionId/revoke', async (req, res) => {
+    refuseProductionAdmin();
+    if (container.partner === undefined) {
+      throw new ForbiddenError('Partner administration requires real provider mode.');
+    }
+    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    if (connection === null) {
+      throw new NotFoundError('partner connection', req.params.connectionId);
+    }
+    await container.partner.admin.revokeConnection(connection.organizationId, connection.id);
+    res.json({ revoked: true, correlationId: getCorrelationId() });
+  });
+
+  router.post('/operations/sandbox/signed-request', async (req, res) => {
+    refuseProductionAdmin();
+    if (container.partner === undefined) {
+      throw new ForbiddenError('The sandbox generator requires real provider mode.');
+    }
+    const input = parseOrThrow(sandboxSignedRequestSchema, req.body ?? {});
+    const result = await container.partner.sandbox.run(input.kind);
+    res.json(result);
   });
 
   router.get('/operations/development-status', (_req, res) => {
@@ -114,11 +379,11 @@ const buildDevelopmentStatus = (container: Container): DevelopmentStatus => {
     providerMode: container.providerMode,
     currentMilestone:
       container.providerMode === 'real'
-        ? 'Version 1a · Slice 2 — PostgreSQL persistence'
+        ? 'Version 1a · Slice 4A — secure partner API integration'
         : 'Version 1a · Slice 1 — visible synthetic journey',
     nextMilestone:
       container.providerMode === 'real'
-        ? 'Slice 3 — Redis + BullMQ durable delivery'
+        ? 'Slice 4B — human administrator authentication and organization RBAC'
         : 'Slice 2 — Prisma repositories, PostgreSQL unit of work, transactional audit + outbox',
     verification: {
       recordedAt: null,
@@ -133,8 +398,15 @@ const buildDevelopmentStatus = (container: Container): DevelopmentStatus => {
       { name: 'Persistence', state: container.providerMode === 'real' ? 'IMPLEMENTED' : 'SIMULATED', detail: container.providerMode === 'real' ? 'Prisma/PostgreSQL unit of work, audit, outbox, read models.' : 'In-memory store; Postgres read models arrive in Slice 2.' },
       { name: 'Telecom risk signals', state: 'SIMULATED', detail: 'Synthetic; real feeds are a later version.' },
       { name: 'Business outcomes', state: 'SIMULATED', detail: 'No bank feedback loop yet; outcome counters are synthetic.' },
-      { name: 'Durable delivery (Redis/BullMQ)', state: 'PLANNED', detail: 'Slice 3.' },
-      { name: 'Partner auth + signatures', state: 'PLANNED', detail: 'Slice 4 trust edge.' },
+      {
+        name: 'Durable delivery (Redis/BullMQ)',
+        state: container.providerMode === 'real' ? 'IMPLEMENTED' : 'PLANNED',
+        detail:
+          container.providerMode === 'real'
+            ? 'Outbox publisher → BullMQ → idempotent worker (at-least-once).'
+            : 'Slice 3; requires real provider mode.',
+      },
+      { name: 'Partner auth + signatures', state: container.providerMode === 'real' ? 'IMPLEMENTED' : 'PLANNED', detail: container.providerMode === 'real' ? 'ES256 request signing, nonce replay protection, HTTP idempotency, Redis rate limits, sandbox credential bootstrap.' : 'Requires real provider mode (Slice 4A).' },
       { name: 'AI assistance (Gemini)', state: 'PLANNED', detail: 'Contract-only; off the deterministic path.' },
     ],
     migrations: {

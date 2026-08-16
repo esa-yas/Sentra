@@ -27,6 +27,7 @@ describe('schema and migrations', () => {
       'outbox_events',
       'inbox_events',
       'idempotency_keys',
+      'partner_api_requests',
     ]) {
       expect(names.has(expected)).toBe(true);
     }

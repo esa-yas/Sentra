@@ -66,6 +66,7 @@ export const PERMISSIONS = {
   PAYMENT_INTENT_SUBMIT: 'payment_intent:submit',
   RISK_EVENT_SUBMIT: 'risk_event:submit',
   RECOMMENDATION_READ: 'recommendation:read',
+  CASE_READ: 'case:read',
   OUTCOME_SUBMIT: 'outcome:submit',
 } as const;
 
@@ -169,6 +170,7 @@ export const PARTNER_SCOPES = {
   PAYMENT_INTENTS_WRITE: 'payment-intents:write',
   RISK_EVENTS_WRITE: 'risk-events:write',
   RECOMMENDATIONS_READ: 'recommendations:read',
+  CASES_READ: 'cases:read',
   OUTCOMES_WRITE: 'outcomes:write',
 } as const;
 
@@ -183,6 +185,7 @@ const SCOPE_PERMISSIONS: Readonly<Record<PartnerScope, readonly Permission[]>> =
   [PARTNER_SCOPES.PAYMENT_INTENTS_WRITE]: [PERMISSIONS.PAYMENT_INTENT_SUBMIT],
   [PARTNER_SCOPES.RISK_EVENTS_WRITE]: [PERMISSIONS.RISK_EVENT_SUBMIT],
   [PARTNER_SCOPES.RECOMMENDATIONS_READ]: [PERMISSIONS.RECOMMENDATION_READ],
+  [PARTNER_SCOPES.CASES_READ]: [PERMISSIONS.CASE_READ],
   [PARTNER_SCOPES.OUTCOMES_WRITE]: [PERMISSIONS.OUTCOME_SUBMIT],
 };
 
@@ -210,6 +213,7 @@ export const scopesAllowedForOrganizationType = (
       return [
         PARTNER_SCOPES.PAYMENT_INTENTS_WRITE,
         PARTNER_SCOPES.RECOMMENDATIONS_READ,
+        PARTNER_SCOPES.CASES_READ,
         PARTNER_SCOPES.OUTCOMES_WRITE,
       ];
     case ORGANIZATION_TYPES.TELECOM:

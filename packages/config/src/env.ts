@@ -66,6 +66,38 @@ export const envSchema = z.object({
   REDIS_URL: z.string().min(1).refine((value) => /^rediss?:\/\//.test(value), {
     message: 'Must be a redis:// or rediss:// connection string.',
   }),
+  /**
+   * Application namespace prefixed to every cache key and BullMQ key. Keeps two deployments
+   * (and the test suite) sharing one Redis without colliding, and makes a stray key obvious.
+   */
+  REDIS_KEY_PREFIX: z.string().min(1).max(64).default('sentra'),
+  /** Bounded connection establishment timeout, so a dead Redis fails fast rather than hanging. */
+  REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(5_000),
+  /** Bounded per-command timeout. A cache read must never stall the request path. */
+  REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(50).max(30_000).default(5_000),
+  /** Upper bound on the reconnect backoff between dropped-connection retries. */
+  REDIS_MAX_RECONNECT_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(5_000),
+
+  /** BullMQ key prefix. Separate from the cache prefix so queues are easy to identify. */
+  QUEUE_PREFIX: z.string().min(1).max(64).default('sentra-queue'),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
+  /** Health/readiness probe port for the worker process. */
+  WORKER_PORT: z.coerce.number().int().min(1).max(65_535).default(3002),
+  /** Delivery retry policy applied to consumer failures. */
+  WORKER_RETRY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(5),
+  WORKER_RETRY_INITIAL_DELAY_MS: z.coerce.number().int().min(50).max(60_000).default(1_000),
+  WORKER_RETRY_BACKOFF: z.enum(['exponential', 'fixed']).default('exponential'),
+  /** How long completed/failed BullMQ jobs are retained before automatic cleanup. */
+  QUEUE_COMPLETED_JOB_RETENTION_SECONDS: z.coerce.number().int().min(60).max(2_592_000).default(3_600),
+  QUEUE_FAILED_JOB_RETENTION_SECONDS: z.coerce.number().int().min(60).max(2_592_000).default(604_800),
+  /**
+   * When true, the worker process also runs the outbox publisher loop in-process. For the
+   * MVP the publisher and worker ship together but keep their responsibilities separate.
+   */
+  WORKER_RUN_PUBLISHER: z
+    .enum(['true', 'false', '1', '0'])
+    .default('true')
+    .transform((value) => value === 'true' || value === '1'),
 
   SUPABASE_URL: optionalNonEmpty,
   SUPABASE_JWT_ISSUER: optionalNonEmpty,
@@ -85,6 +117,23 @@ export const envSchema = z.object({
   /** Tolerance for clock skew when verifying a partner token. */
   PARTNER_TOKEN_CLOCK_TOLERANCE_SECONDS: z.coerce.number().int().min(0).max(120).default(5),
 
+  /**
+   * Comma-separated allow-list of JWS algorithms for partner request signatures.
+   * Unknown or forbidden algorithms (none, HMAC, RSA) are rejected regardless of this list.
+   */
+  SIGNING_ALLOWED_ALGORITHMS: z.string().default('ES256'),
+  /** How far in the future a signed timestamp may be (clock skew). */
+  SIGNING_TIMESTAMP_SKEW_SECONDS: z.coerce.number().int().min(0).max(120).default(30),
+  /** How far in the past a signed timestamp may be. Also the Redis nonce TTL. */
+  SIGNING_REPLAY_WINDOW_SECONDS: z.coerce.number().int().min(30).max(3_600).default(300),
+
+  /**
+   * Development-only partner credential bootstrap. Production refuses to boot when this is
+   * true — Slice 4B replaces it with authenticated human administrator access.
+   */
+  PARTNER_BOOTSTRAP_ENABLED: booleanFromString,
+  PARTNER_BOOTSTRAP_TOKEN: optionalNonEmpty,
+
   DEFAULT_DEADLINE_MS: z.coerce.number().int().min(50).max(10_000).default(650),
   MAX_DEADLINE_MS: z.coerce.number().int().min(50).max(30_000).default(2_000),
   /** How far back a payment may look for a matching consented telecom signal. */
@@ -94,6 +143,12 @@ export const envSchema = z.object({
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(600),
   /** The token endpoint is a credential-guessing target, so it gets a tighter budget. */
   RATE_LIMIT_TOKEN_MAX_REQUESTS: z.coerce.number().int().min(1).max(10_000).default(30),
+  /** Per partner-connection budget for signed write endpoints. */
+  RATE_LIMIT_PARTNER_WRITE_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(60),
+  /** Per-organization budget across all partner connections. */
+  RATE_LIMIT_PARTNER_ORG_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(300),
+  /** Per partner-connection + endpoint-class budget. */
+  RATE_LIMIT_PARTNER_ENDPOINT_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(30),
 
   SENTRY_DSN: optionalNonEmpty,
   SENTRY_ENVIRONMENT: z.string().min(1).default('local'),

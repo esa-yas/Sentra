@@ -1,4 +1,12 @@
-import { InternalError, NotFoundError, isAppError, toErrorEnvelope, type AppError } from '@sentra/contracts';
+import {
+  HTTP_HEADERS,
+  InternalError,
+  NotFoundError,
+  RateLimitedError,
+  isAppError,
+  toErrorEnvelope,
+  type AppError,
+} from '@sentra/contracts';
 import { getCorrelationId, type Logger } from '@sentra/observability';
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 
@@ -25,6 +33,9 @@ export const errorHandler = (logger: Logger): ErrorRequestHandler => (err, _req,
 
   if (res.headersSent) {
     return;
+  }
+  if (appError instanceof RateLimitedError) {
+    res.setHeader(HTTP_HEADERS.RETRY_AFTER, String(appError.retryAfterSeconds));
   }
   res.status(appError.httpStatus).json(toErrorEnvelope(appError, correlationId));
 };

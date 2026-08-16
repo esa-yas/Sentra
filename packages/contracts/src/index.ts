@@ -17,4 +17,5 @@ export * from './identifiers';
 export * from './events';
 export * from './http';
 export * from './deny-list';
+export * from './signing';
 export * from './api';

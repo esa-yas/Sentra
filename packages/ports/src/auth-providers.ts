@@ -72,6 +72,7 @@ export interface PartnerAuthProvider {
  */
 export interface SignatureVerificationInput {
   readonly organizationId: string;
+  readonly partnerConnectionId: string;
   readonly keyId: string;
   /** Exact bytes that were signed, before any parsing. */
   readonly payload: Uint8Array;
@@ -87,6 +88,8 @@ export const SIGNATURE_FAILURE_REASONS = {
   // The key belongs to a different tenant than the one submitting the event.
   TENANT_MISMATCH: 'TENANT_MISMATCH',
   SIGNATURE_INVALID: 'SIGNATURE_INVALID',
+  ALGORITHM_NOT_ALLOWED: 'ALGORITHM_NOT_ALLOWED',
+  MALFORMED_SIGNATURE: 'MALFORMED_SIGNATURE',
   // Signed too long ago, or dated in the future beyond the tolerated skew.
   OUTSIDE_REPLAY_WINDOW: 'OUTSIDE_REPLAY_WINDOW',
 } as const;
