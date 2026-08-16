@@ -284,3 +284,28 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     body: '{}',
   });
 
+export interface MemberRow {
+  id: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  activatedAt: string | null;
+}
+
+export const getMembers = (): Promise<ApiResult<{ items: MemberRow[] }>> => apiFetch('/api/members');
+
+export const addMember = (email: string, role: string): Promise<ApiResult<MemberRow>> =>
+  apiFetch('/api/members', { method: 'POST', body: JSON.stringify({ email, role }) });
+
+export const updateMemberRole = (membershipId: string, role: string): Promise<ApiResult<MemberRow>> =>
+  apiFetch(`/api/members/${encodeURIComponent(membershipId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+
+export const removeMember = (membershipId: string): Promise<ApiResult<{ removed: boolean }>> =>
+  apiFetch(`/api/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
+

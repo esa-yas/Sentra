@@ -40,6 +40,7 @@ import {
 import type { Logger } from '@sentra/observability';
 import type { Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
+import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
 import { createPartnerAdmin, type PartnerAdmin } from './partner/admin';
 import { createPartnerAuthenticator, type PartnerAuthenticator } from './partner/authenticator';
 import { createPartnerIdempotency, type PartnerIdempotency } from './partner/idempotency';
@@ -74,6 +75,7 @@ export interface PartnerRuntime {
 /** Human authentication runtime, wired only when a Supabase verifier is configured. */
 export interface UserAuthRuntime {
   readonly resolve: ResolveUserPrincipalUseCase;
+  readonly memberAdmin: MemberAdmin;
 }
 
 export interface Container {
@@ -179,20 +181,24 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
   const evaluate = createEvaluatePaymentRiskUseCase({ clock, ids, audit, unitOfWork, persistence });
 
   const userTokenVerifier = buildUserTokenVerifier(config, clock);
-  const auth: UserAuthRuntime | undefined =
-    userTokenVerifier === undefined
-      ? undefined
-      : {
-          resolve: createResolveUserPrincipalUseCase({
-            clock,
-            ids,
-            unitOfWork,
-            verifier: userTokenVerifier,
-            users: createPrismaUserRepository(prisma, unitOfWork),
-            identities: createPrismaIdentityLinkRepository(prisma, unitOfWork),
-            memberships: createPrismaMembershipRepository(prisma, unitOfWork),
-          }),
-        };
+  let auth: UserAuthRuntime | undefined;
+  if (userTokenVerifier !== undefined) {
+    const users = createPrismaUserRepository(prisma, unitOfWork);
+    const identities = createPrismaIdentityLinkRepository(prisma, unitOfWork);
+    const memberships = createPrismaMembershipRepository(prisma, unitOfWork);
+    auth = {
+      resolve: createResolveUserPrincipalUseCase({
+        clock,
+        ids,
+        unitOfWork,
+        verifier: userTokenVerifier,
+        users,
+        identities,
+        memberships,
+      }),
+      memberAdmin: createMemberAdmin({ memberships, users, unitOfWork, audit, ids, clock }),
+    };
+  }
 
   const cache = createRedisCacheProvider(config);
   const queue = createBullmqQueueProvider(config);

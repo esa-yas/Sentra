@@ -1,4 +1,5 @@
 export * from './organizations';
+export * from './members';
 export * from './partners';
 export * from './partner-ingest';
 export * from './oauth';
