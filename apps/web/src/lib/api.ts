@@ -226,3 +226,30 @@ export const runSandboxSignedRequest = (
     body: JSON.stringify({ kind }),
   });
 
+export interface AuthMembership {
+  organizationId: string;
+  organizationSlug: string;
+  organizationType: string;
+  role: string;
+  permissions: string[];
+  purposes: string[];
+}
+
+export interface MeResponse {
+  user: { id: string; email: string; displayName: string };
+  memberships: AuthMembership[];
+  provisioned: boolean;
+  providerMode: string;
+}
+
+/** Resolves the signed-in user from the API's verified `/auth/me`, using the bearer token. */
+export const getCurrentUser = (token: string): Promise<ApiResult<MeResponse>> =>
+  apiFetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+
+export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =>
+  apiFetch('/api/auth/logout', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: '{}',
+  });
+

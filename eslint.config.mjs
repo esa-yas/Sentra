@@ -49,6 +49,13 @@ export default tseslint.config(
     rules: { 'no-restricted-syntax': 'off', 'no-console': 'off' },
   },
   {
+    // The browser bundle must read NEXT_PUBLIC_* values at build time; these are inlined by
+    // Next and cannot go through the server-side loadEnv(). Confined to the one web module
+    // that reads them, which only ever touches anon/public values.
+    files: ['apps/web/src/lib/supabase/config.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
     files: ['**/__tests__/**/*.ts', 'tests/**/*.ts', 'packages/testing/src/**/*.ts', 'packages/db/prisma/**/*.ts'],
     rules: {
       'no-restricted-syntax': 'off',
