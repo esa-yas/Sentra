@@ -7,6 +7,7 @@ import { correlationMiddleware } from './middleware/correlation';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestLoggingMiddleware } from './middleware/request-logging';
 import { requestMetricsMiddleware } from './middleware/request-metrics';
+import { createAuthRouter } from './routes/auth';
 import { createHealthRouter } from './routes/health';
 import { createOperationsRouter } from './routes/operations';
 import { createSimulatorRouter } from './routes/simulator';
@@ -46,6 +47,7 @@ export const createApp = (container: Container): Express => {
 
   app.use('/', createHealthRouter(container));
   app.use('/api/simulator', createSimulatorRouter(container));
+  app.use('/api', createAuthRouter(container));
   app.use('/api', createOperationsRouter(container));
   app.use('/v1', createPartnerAdminRouter(container));
   app.use('/v1', createPartnerIngestRouter(container));

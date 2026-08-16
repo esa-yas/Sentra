@@ -18,8 +18,12 @@ import {
   createPrismaPartnerDirectory,
   createPrismaPartnerDomainStore,
   createPrismaPartnerSigningKeyRepository,
+  createPrismaIdentityLinkRepository,
+  createPrismaMembershipRepository,
   createPrismaUnitOfWork,
+  createPrismaUserRepository,
   createRedisCacheProvider,
+  createSupabaseUserTokenVerifier,
   createSystemClock,
   createUlidIdGenerator,
 } from '@sentra/adapters';
@@ -29,7 +33,9 @@ import {
   SYNTHETIC_DEMO_SUBJECT_REF,
   SYNTHETIC_TELECOM_SLUG,
   createEvaluatePaymentRiskUseCase,
+  createResolveUserPrincipalUseCase,
   type EvaluatePaymentRiskUseCase,
+  type ResolveUserPrincipalUseCase,
 } from '@sentra/core';
 import type { Logger } from '@sentra/observability';
 import type { Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
@@ -65,6 +71,11 @@ export interface PartnerRuntime {
   readonly bankOrganizationId: string;
 }
 
+/** Human authentication runtime, wired only when a Supabase verifier is configured. */
+export interface UserAuthRuntime {
+  readonly resolve: ResolveUserPrincipalUseCase;
+}
+
 export interface Container {
   readonly config: AppConfig;
   readonly logger: Logger;
@@ -78,8 +89,49 @@ export interface Container {
   readonly syntheticSubjectRef: string;
   readonly startedAtMs: number;
   readonly partner?: PartnerRuntime;
+  readonly auth?: UserAuthRuntime;
   readonly disconnect: () => Promise<void>;
 }
+
+/**
+ * Builds the Supabase user-token verifier from configuration, preferring asymmetric
+ * verification against the project's published JWKS (slide 053) and falling back to the
+ * legacy shared secret only when no JWKS endpoint is configured. Returns `undefined` when
+ * neither is set, in which case human authentication is simply not offered.
+ */
+const buildUserTokenVerifier = (config: AppConfig, clock: Clock) => {
+  const audience = config.supabase.jwtAudience;
+  const clockToleranceSeconds = config.partnerAuth.clockToleranceSeconds;
+  // Supabase signs tokens with the project's auth URL as `iss`; derive it from the project
+  // URL so a stale SUPABASE_JWT_ISSUER cannot cause a false issuer mismatch.
+  const issuer =
+    config.supabase.url !== undefined
+      ? `${config.supabase.url.replace(/\/$/, '')}/auth/v1`
+      : config.supabase.jwtIssuer;
+
+  if (config.supabase.jwksUrl !== undefined) {
+    return createSupabaseUserTokenVerifier({
+      clock,
+      ...(issuer === undefined ? {} : { issuer }),
+      audience,
+      allowedAlgorithms: ['ES256', 'RS256'],
+      jwksUrl: config.supabase.jwksUrl,
+      jwksCacheSeconds: config.supabase.jwksCacheSeconds,
+      clockToleranceSeconds,
+    });
+  }
+  if (config.supabase.jwtSecret !== undefined) {
+    return createSupabaseUserTokenVerifier({
+      clock,
+      ...(issuer === undefined ? {} : { issuer }),
+      audience,
+      allowedAlgorithms: ['HS256'],
+      sharedSecret: config.supabase.jwtSecret,
+      clockToleranceSeconds,
+    });
+  }
+  return undefined;
+};
 
 export const buildContainer = async (config: AppConfig, logger: Logger): Promise<Container> => {
   const providerMode: ProviderMode = config.runtime.providerMode;
@@ -125,6 +177,22 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
   });
   const store = createPostgresOperationsStore(prisma, clock);
   const evaluate = createEvaluatePaymentRiskUseCase({ clock, ids, audit, unitOfWork, persistence });
+
+  const userTokenVerifier = buildUserTokenVerifier(config, clock);
+  const auth: UserAuthRuntime | undefined =
+    userTokenVerifier === undefined
+      ? undefined
+      : {
+          resolve: createResolveUserPrincipalUseCase({
+            clock,
+            ids,
+            unitOfWork,
+            verifier: userTokenVerifier,
+            users: createPrismaUserRepository(prisma, unitOfWork),
+            identities: createPrismaIdentityLinkRepository(prisma, unitOfWork),
+            memberships: createPrismaMembershipRepository(prisma, unitOfWork),
+          }),
+        };
 
   const cache = createRedisCacheProvider(config);
   const queue = createBullmqQueueProvider(config);
@@ -214,6 +282,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     syntheticOrganizationId: bank.id,
     syntheticSubjectRef: SYNTHETIC_DEMO_SUBJECT_REF,
     startedAtMs: Date.now(),
+    ...(auth === undefined ? {} : { auth }),
     partner: {
       authenticator,
       idempotency: createPartnerIdempotency({ config, clock, ids, keys: idempotencyKeys }),

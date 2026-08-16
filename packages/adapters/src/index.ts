@@ -64,4 +64,18 @@ export { Argon2PasswordHasher, createArgon2PasswordHasher } from './crypto/argon
 export { NodeSecureRandom, createNodeSecureRandom } from './crypto/node-secure-random';
 export { JwsSignatureVerifier, createJwsSignatureVerifier } from './crypto/jws-signature-verifier';
 export { generateEs256KeyPair, type IssuedEs256KeyPair } from './crypto/es256-keys';
+export {
+  SupabaseUserTokenVerifier,
+  createSupabaseUserTokenVerifier,
+  type SupabaseUserTokenVerifierOptions,
+} from './auth/supabase-user-token-verifier';
+export { PrismaUserRepository, createPrismaUserRepository } from './prisma/prisma-user-repository';
+export {
+  PrismaIdentityLinkRepository,
+  createPrismaIdentityLinkRepository,
+} from './prisma/prisma-identity-link-repository';
+export {
+  PrismaMembershipRepository,
+  createPrismaMembershipRepository,
+} from './prisma/prisma-membership-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';

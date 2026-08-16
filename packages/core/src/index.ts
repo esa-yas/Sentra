@@ -28,3 +28,9 @@ export {
   type EvaluatePaymentRiskUseCase,
 } from './decision/evaluate-payment-risk';
 export { SIMULATOR_SCENARIOS, SYNTHETIC_BANK_SLUG, SYNTHETIC_DEMO_SUBJECT_REF, SYNTHETIC_TELECOM_SLUG } from './decision/scenarios';
+export {
+  createResolveUserPrincipalUseCase,
+  type ResolveUserPrincipalDeps,
+  type ResolveUserPrincipalUseCase,
+  type ResolvedUserSession,
+} from './identity/resolve-user-principal';

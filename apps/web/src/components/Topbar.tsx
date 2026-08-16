@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getDevelopmentStatus } from '@/lib/api';
+import { SessionMenu } from './SessionMenu';
 
 /** Environment + provider-mode banner. Reminds operators that all data is synthetic. */
 export function Topbar() {
@@ -34,6 +35,7 @@ export function Topbar() {
         <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300">
           providers: <span className="font-medium text-sky-300">{mode}</span>
         </span>
+        <SessionMenu />
       </div>
     </header>
   );
