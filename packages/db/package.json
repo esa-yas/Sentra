@@ -8,12 +8,12 @@
   "scripts": {
     "build": "tsc --build",
     "generate": "prisma generate",
-    "migrate": "node scripts/with-root-env.mjs prisma migrate dev",
-    "deploy": "node scripts/with-root-env.mjs prisma migrate deploy",
-    "status": "node scripts/with-root-env.mjs prisma migrate status",
-    "reset": "node scripts/with-root-env.mjs prisma migrate reset --force",
-    "seed": "node scripts/with-root-env.mjs tsx prisma/seed.ts",
-    "studio": "node scripts/with-root-env.mjs prisma studio"
+    "migrate": "tsx scripts/with-root-env.ts prisma migrate dev",
+    "deploy": "tsx scripts/with-root-env.ts prisma migrate deploy",
+    "status": "tsx scripts/with-root-env.ts prisma migrate status",
+    "reset": "tsx scripts/with-root-env.ts prisma migrate reset --force",
+    "seed": "tsx scripts/with-root-env.ts tsx prisma/seed.ts",
+    "studio": "tsx scripts/with-root-env.ts prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",

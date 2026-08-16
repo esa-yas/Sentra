@@ -11,4 +11,12 @@ export {
   resetConfigForTesting,
   type AppConfig,
 } from './config';
-export { parseDotEnv, loadDotEnvFile, resetDotEnvLoaderForTesting } from './dotenv';
+export {
+  parseDotEnv,
+  loadDotEnvFile,
+  resolveRepositoryRoot,
+  resolveRootEnvFile,
+  resetDotEnvLoaderForTesting,
+  type LoadDotEnvOptions,
+  type DotEnvLoadResult,
+} from './dotenv';
