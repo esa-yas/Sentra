@@ -64,4 +64,9 @@ export { Argon2PasswordHasher, createArgon2PasswordHasher } from './crypto/argon
 export { NodeSecureRandom, createNodeSecureRandom } from './crypto/node-secure-random';
 export { JwsSignatureVerifier, createJwsSignatureVerifier } from './crypto/jws-signature-verifier';
 export { generateEs256KeyPair, type IssuedEs256KeyPair } from './crypto/es256-keys';
+export {
+  SupabaseUserTokenVerifier,
+  createSupabaseUserTokenVerifier,
+  type SupabaseUserTokenVerifierOptions,
+} from './auth/supabase-user-token-verifier';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';
