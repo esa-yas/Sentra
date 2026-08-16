@@ -28,7 +28,28 @@ import type {
  * is always readable. Types come from `@sentra/contracts` — the frontend never redeclares
  * request or response shapes.
  */
+import { authEnabled } from './supabase/config';
+import { createClient } from './supabase/client';
+
 const CORRELATION_HEADER = 'x-correlation-id';
+
+/**
+ * Attaches the signed-in user's Supabase access token when auth is enabled, so the API can
+ * authenticate the console's calls. The active organization is resolved server-side from the
+ * user's memberships (a single-org user needs no explicit selection).
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!authEnabled) {
+    return {};
+  }
+  try {
+    const { data } = await createClient().auth.getSession();
+    const token = data.session?.access_token;
+    return token === undefined ? {} : { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
+}
 
 export interface ApiError {
   code: string;
@@ -60,9 +81,10 @@ const readError = (body: unknown, fallback: string): ApiError => {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
+    const auth = await authHeaders();
     const response = await fetch(path, {
       ...init,
-      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+      headers: { 'content-type': 'application/json', ...auth, ...(init?.headers ?? {}) },
       cache: 'no-store',
     });
     const correlationId = response.headers.get(CORRELATION_HEADER);

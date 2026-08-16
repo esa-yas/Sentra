@@ -164,6 +164,10 @@ describe('partner API security', () => {
       RATE_LIMIT_PARTNER_WRITE_MAX_REQUESTS: '8',
       RATE_LIMIT_PARTNER_ENDPOINT_MAX_REQUESTS: '8',
       CORS_ALLOWED_ORIGINS: 'http://localhost:3001',
+      // This suite exercises partner request signing, not console RBAC. Disable human auth so
+      // its setup calls to the console admin endpoints are not gated by requirePermission.
+      SUPABASE_URL: '',
+      SUPABASE_JWT_SECRET: '',
       ...overrides,
     });
     const container = await buildContainer(config, createNullLogger());
