@@ -2,6 +2,7 @@ import { type MemberRole, type Permission, type PartnerScope } from './authoriza
 import { type OrganizationType } from './organization';
 import { type Purpose } from './purpose';
 import { type ActorType } from './audit';
+import { ForbiddenError, TenantMismatchError } from './errors';
 
 /**
  * The resolved caller. Slide 073 requires every request to prove identity, tenant,
@@ -130,3 +131,37 @@ export const principalPurposes = (principal: RequestPrincipal, organizationId?: 
     }
   }
 };
+
+export interface AuthorizationRequest {
+  readonly permission: Permission;
+  readonly organizationId: string;
+}
+
+/**
+ * The single authorization decision. Slide 073 requires identity, tenant, and permitted
+ * action to all be checked; this is where the last two meet.
+ *
+ * A caller acting on an organization it does not belong to is a {@link TenantMismatchError}
+ * (403) — distinct from belonging but lacking the permission, which is a {@link
+ * ForbiddenError} (403). Keeping them separate makes a cross-tenant attempt legible in the
+ * audit trail rather than indistinguishable from an ordinary permission gap.
+ */
+export const authorize = (
+  principal: RequestPrincipal,
+  { permission, organizationId }: AuthorizationRequest,
+): void => {
+  if (!principalOrganizationIds(principal).includes(organizationId)) {
+    throw new TenantMismatchError();
+  }
+  if (!principalPermissionsIn(principal, organizationId).includes(permission)) {
+    throw new ForbiddenError();
+  }
+};
+
+/** Non-throwing form of {@link authorize}, for hiding UI a principal may not act on. */
+export const can = (
+  principal: RequestPrincipal,
+  { permission, organizationId }: AuthorizationRequest,
+): boolean =>
+  principalOrganizationIds(principal).includes(organizationId) &&
+  principalPermissionsIn(principal, organizationId).includes(permission);

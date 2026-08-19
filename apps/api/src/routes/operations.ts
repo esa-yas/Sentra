@@ -2,6 +2,7 @@ import {
   ForbiddenError,
   NotFoundError,
   PARTNER_CONNECTION_KINDS,
+  PERMISSIONS,
   createPartnerConnectionRequestSchema,
   developmentStatusSchema,
   eventListQuerySchema,
@@ -15,8 +16,10 @@ import {
   type ProviderHealth,
 } from '@sentra/contracts';
 import { getCorrelationId } from '@sentra/observability';
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { Container } from '../container';
+import { getAuthContext } from '../auth/request-context';
+import { createAuthorizer } from '../auth/require-permission';
 import { QueueActionRejected } from '../queue-admin';
 import { parseOrThrow } from '../validation';
 
@@ -28,8 +31,21 @@ export const createOperationsRouter = (container: Container): Router => {
   const router = Router();
   const { store, config, queueAdmin } = container;
 
-  router.get('/operations/summary', async (_req, res) => {
-    res.json(await store.summary(config.runtime.nodeEnv));
+  // The organization a request acts on: set by the authorization middleware when auth is
+  // enabled, and falling back to the demo organization in open in-memory mode.
+  const resolveOrganizationId = (req: Request): string =>
+    getAuthContext(req)?.organizationId ?? container.syntheticOrganizationId;
+
+  // Every console endpoint requires an authenticated member of the active organization. The
+  // guard is a pass-through when auth is not configured (demo/in-memory mode), so that mode is
+  // unchanged. Partner credential writes below add a stricter permission on top.
+  const { requirePermission } = createAuthorizer(container.auth?.resolve);
+  const partnerWrite = requirePermission(PERMISSIONS.PARTNER_WRITE);
+  const rotateSecret = requirePermission(PERMISSIONS.PARTNER_ROTATE_SECRET);
+  router.use(requirePermission(PERMISSIONS.ORGANIZATION_READ));
+
+  router.get('/operations/summary', async (req, res) => {
+    res.json(await store.summary(resolveOrganizationId(req), config.runtime.nodeEnv));
   });
 
   router.get('/operations/integrations', async (_req, res) => {
@@ -110,11 +126,11 @@ export const createOperationsRouter = (container: Container): Router => {
 
   router.get('/events', async (req, res) => {
     const query = parseOrThrow(eventListQuerySchema, req.query);
-    res.json(await store.listEvents(query));
+    res.json(await store.listEvents(resolveOrganizationId(req), query));
   });
 
   router.get('/events/:id', async (req, res) => {
-    const event = await store.getEvent(req.params.id);
+    const event = await store.getEvent(resolveOrganizationId(req), req.params.id);
     if (event === undefined) {
       throw new NotFoundError('event', req.params.id);
     }
@@ -126,24 +142,27 @@ export const createOperationsRouter = (container: Container): Router => {
     const rawCursor = req.query['cursor'];
     const limit = typeof rawLimit === 'string' ? Number(rawLimit) : 50;
     const cursor = typeof rawCursor === 'string' ? rawCursor : undefined;
-    res.json(await store.listDecisions(Number.isFinite(limit) ? limit : 50, cursor));
+    res.json(
+      await store.listDecisions(resolveOrganizationId(req), Number.isFinite(limit) ? limit : 50, cursor),
+    );
   });
 
   router.get('/cases/:id', async (req, res) => {
-    const recommendation = await store.getDecision(req.params.id);
+    const organizationId = resolveOrganizationId(req);
+    const recommendation = await store.getDecision(organizationId, req.params.id);
     if (recommendation === undefined) {
       throw new NotFoundError('case', req.params.id);
     }
-    const flow = (await store.getFlowByCorrelation(recommendation.correlationId)) ?? null;
+    const flow = (await store.getFlowByCorrelation(organizationId, recommendation.correlationId)) ?? null;
     res.json({ recommendation, flow });
   });
 
-  router.get('/operations/flow/latest', async (_req, res) => {
-    res.json((await store.latestFlow()) ?? emptyFlow(getCorrelationId()));
+  router.get('/operations/flow/latest', async (req, res) => {
+    res.json((await store.latestFlow(resolveOrganizationId(req))) ?? emptyFlow(getCorrelationId()));
   });
 
   router.get('/operations/flow/:correlationId', async (req, res) => {
-    const flow = await store.getFlowByCorrelation(req.params.correlationId);
+    const flow = await store.getFlowByCorrelation(resolveOrganizationId(req), req.params.correlationId);
     if (flow === undefined) {
       throw new NotFoundError('flow', req.params.correlationId);
     }
@@ -270,7 +289,7 @@ export const createOperationsRouter = (container: Container): Router => {
     }
   };
 
-  router.post('/operations/partners', async (req, res) => {
+  router.post('/operations/partners', partnerWrite, async (req, res) => {
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
@@ -284,46 +303,46 @@ export const createOperationsRouter = (container: Container): Router => {
     res.status(201).json(created);
   });
 
-  router.post('/operations/partners/:connectionId/keys', async (req, res) => {
+  router.post('/operations/partners/:connectionId/keys', rotateSecret, async (req, res) => {
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
     }
-    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    const connection = await container.partner.connections.findByIdUnscoped((req.params['connectionId'] as string));
     if (connection === null) {
-      throw new NotFoundError('partner connection', req.params.connectionId);
+      throw new NotFoundError('partner connection', (req.params['connectionId'] as string));
     }
     const issued = await container.partner.admin.issueKey(connection.organizationId, connection.id);
     res.status(201).json(issued);
   });
 
-  router.post('/operations/partners/:connectionId/keys/:kid/revoke', async (req, res) => {
+  router.post('/operations/partners/:connectionId/keys/:kid/revoke', rotateSecret, async (req, res) => {
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
     }
-    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    const connection = await container.partner.connections.findByIdUnscoped((req.params['connectionId'] as string));
     if (connection === null) {
-      throw new NotFoundError('partner connection', req.params.connectionId);
+      throw new NotFoundError('partner connection', (req.params['connectionId'] as string));
     }
-    await container.partner.admin.revokeKey(connection.organizationId, connection.id, req.params.kid);
+    await container.partner.admin.revokeKey(connection.organizationId, connection.id, (req.params['kid'] as string));
     res.json({ revoked: true, correlationId: getCorrelationId() });
   });
 
-  router.post('/operations/partners/:connectionId/revoke', async (req, res) => {
+  router.post('/operations/partners/:connectionId/revoke', partnerWrite, async (req, res) => {
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
     }
-    const connection = await container.partner.connections.findByIdUnscoped(req.params.connectionId);
+    const connection = await container.partner.connections.findByIdUnscoped((req.params['connectionId'] as string));
     if (connection === null) {
-      throw new NotFoundError('partner connection', req.params.connectionId);
+      throw new NotFoundError('partner connection', (req.params['connectionId'] as string));
     }
     await container.partner.admin.revokeConnection(connection.organizationId, connection.id);
     res.json({ revoked: true, correlationId: getCorrelationId() });
   });
 
-  router.post('/operations/sandbox/signed-request', async (req, res) => {
+  router.post('/operations/sandbox/signed-request', partnerWrite, async (req, res) => {
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('The sandbox generator requires real provider mode.');

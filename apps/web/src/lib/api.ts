@@ -28,7 +28,37 @@ import type {
  * is always readable. Types come from `@sentra/contracts` — the frontend never redeclares
  * request or response shapes.
  */
+import { authEnabled } from './supabase/config';
+import { createClient } from './supabase/client';
+import { readActiveOrg } from './active-org';
+
 const CORRELATION_HEADER = 'x-correlation-id';
+
+/**
+ * Attaches the signed-in user's Supabase access token when auth is enabled, so the API can
+ * authenticate the console's calls, plus the selected organization when the operator belongs
+ * to more than one (a single-org user is resolved server-side).
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!authEnabled) {
+    return {};
+  }
+  try {
+    const { data } = await createClient().auth.getSession();
+    const token = data.session?.access_token;
+    if (token === undefined) {
+      return {};
+    }
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    const activeOrg = readActiveOrg();
+    if (activeOrg !== null) {
+      headers['x-organization-id'] = activeOrg;
+    }
+    return headers;
+  } catch {
+    return {};
+  }
+}
 
 export interface ApiError {
   code: string;
@@ -60,9 +90,10 @@ const readError = (body: unknown, fallback: string): ApiError => {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
+    const auth = await authHeaders();
     const response = await fetch(path, {
       ...init,
-      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+      headers: { 'content-type': 'application/json', ...auth, ...(init?.headers ?? {}) },
       cache: 'no-store',
     });
     const correlationId = response.headers.get(CORRELATION_HEADER);
@@ -252,4 +283,29 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     headers: { Authorization: `Bearer ${token}` },
     body: '{}',
   });
+
+export interface MemberRow {
+  id: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  activatedAt: string | null;
+}
+
+export const getMembers = (): Promise<ApiResult<{ items: MemberRow[] }>> => apiFetch('/api/members');
+
+export const addMember = (email: string, role: string): Promise<ApiResult<MemberRow>> =>
+  apiFetch('/api/members', { method: 'POST', body: JSON.stringify({ email, role }) });
+
+export const updateMemberRole = (membershipId: string, role: string): Promise<ApiResult<MemberRow>> =>
+  apiFetch(`/api/members/${encodeURIComponent(membershipId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+
+export const removeMember = (membershipId: string): Promise<ApiResult<{ removed: boolean }>> =>
+  apiFetch(`/api/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
 

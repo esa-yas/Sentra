@@ -2,10 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from '@/lib/session';
 import { NAV_ITEMS } from './nav';
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { hasPermission, loading, activeMembership } = useSession();
+  // Role-aware hiding only applies once an active membership is resolved. While loading, or if
+  // no membership resolves, show the full nav — the API remains the real authorization boundary,
+  // so a UX glitch can never leave an operator staring at an empty sidebar.
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      loading ||
+      activeMembership === null ||
+      item.permission === undefined ||
+      hasPermission(item.permission),
+  );
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
@@ -20,7 +32,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           return (
             <Link
