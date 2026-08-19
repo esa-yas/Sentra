@@ -35,6 +35,12 @@ export {
   createPrismaDecisionPersistence,
 } from './prisma/prisma-decision-persistence';
 export { PostgresOperationsStore, createPostgresOperationsStore } from './prisma/postgres-operations-store';
+export {
+  PrismaAuditReadStore,
+  createPrismaAuditReadStore,
+  verifyChainEvents,
+  type VerifiableAuditEvent,
+} from './prisma/prisma-audit-read-store';
 export { PostgresQueueStore, createPostgresQueueStore } from './prisma/postgres-queue-store';
 export {
   PrismaPartnerConnectionRepository,

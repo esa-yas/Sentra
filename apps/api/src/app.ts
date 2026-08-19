@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestLoggingMiddleware } from './middleware/request-logging';
 import { requestMetricsMiddleware } from './middleware/request-metrics';
 import { createAuthRouter } from './routes/auth';
+import { createAuditRouter } from './routes/audit';
 import { createHealthRouter } from './routes/health';
 import { createMembersRouter } from './routes/members';
 import { createOperationsRouter } from './routes/operations';
@@ -50,6 +51,7 @@ export const createApp = (container: Container): Express => {
   app.use('/api/simulator', createSimulatorRouter(container));
   app.use('/api', createAuthRouter(container));
   app.use('/api', createMembersRouter(container));
+  app.use('/api', createAuditRouter(container));
   app.use('/api', createOperationsRouter(container));
   app.use('/v1', createPartnerAdminRouter(container));
   app.use('/v1', createPartnerIngestRouter(container));

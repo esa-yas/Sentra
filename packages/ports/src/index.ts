@@ -156,3 +156,4 @@ export {
 } from './decision-persistence';
 
 export type { OperationsReadModel } from './operations-read-model';
+export type { AuditReadModel, AuditEventList } from './audit-read-model';
