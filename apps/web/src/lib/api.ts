@@ -309,3 +309,36 @@ export const updateMemberRole = (membershipId: string, role: string): Promise<Ap
 export const removeMember = (membershipId: string): Promise<ApiResult<{ removed: boolean }>> =>
   apiFetch(`/api/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
 
+export interface AuditEventRow {
+  id: string;
+  sequence: string;
+  actorType: string;
+  actorLabel: string | null;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  outcome: string;
+  correlationId: string;
+  occurredAt: string;
+  hashPrev: string;
+  hashSelf: string;
+}
+
+export interface AuditVerification {
+  chainKey: string;
+  valid: boolean;
+  eventsVerified: number;
+  firstSequence: string | null;
+  lastSequence: string | null;
+  brokenAtSequence: string | null;
+  verifiedAt: string;
+}
+
+export const getAuditEvents = (
+  query: Record<string, string | number | undefined> = {},
+): Promise<ApiResult<{ items: AuditEventRow[]; nextCursor?: string }>> =>
+  apiFetch(`/api/audit/events${buildQuery(query)}`);
+
+export const verifyAuditChain = (): Promise<ApiResult<AuditVerification>> =>
+  apiFetch('/api/audit/verify', { method: 'POST', body: '{}' });
+

@@ -31,6 +31,8 @@
     "dev:publisher": "WORKER_RUN_PUBLISHER=true pnpm --filter @sentra/worker run dev",
     "dev:web": "pnpm --filter @sentra/web run dev",
     "dev": "pnpm --parallel --filter @sentra/api --filter @sentra/worker --filter @sentra/web run dev",
+    "dev:real": "SENTRA_PROVIDER_MODE=real pnpm --parallel --filter @sentra/api --filter @sentra/worker --filter @sentra/web run dev",
+    "dev:clean": "rm -rf apps/web/.next && pnpm run dev:real",
     "partner:sign": "pnpm --filter @sentra/api exec tsx src/scripts/partner-sign.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm test:unit"
   },

@@ -8,6 +8,7 @@ import {
   createJwsSignatureVerifier,
   createNodeSecureRandom,
   createPostgresOperationsStore,
+  createPrismaAuditReadStore,
   createPostgresQueueStore,
   createPrismaAuditProvider,
   createPrismaDecisionPersistence,
@@ -38,7 +39,7 @@ import {
   type ResolveUserPrincipalUseCase,
 } from '@sentra/core';
 import type { Logger } from '@sentra/observability';
-import type { Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
+import type { AuditReadModel, Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
 import { createPartnerAdmin, type PartnerAdmin } from './partner/admin';
@@ -92,6 +93,8 @@ export interface Container {
   readonly startedAtMs: number;
   readonly partner?: PartnerRuntime;
   readonly auth?: UserAuthRuntime;
+  /** Audit read + hash-chain verification. Wired in real provider mode only. */
+  readonly auditRead?: AuditReadModel;
   readonly disconnect: () => Promise<void>;
 }
 
@@ -178,6 +181,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     outboxMaxAttempts: config.worker.outboxMaxAttempts,
   });
   const store = createPostgresOperationsStore(prisma, clock);
+  const auditRead = createPrismaAuditReadStore(prisma, clock, config.limits.auditVerifyMaxEvents);
   const evaluate = createEvaluatePaymentRiskUseCase({ clock, ids, audit, unitOfWork, persistence });
 
   const userTokenVerifier = buildUserTokenVerifier(config, clock);
@@ -289,6 +293,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     syntheticSubjectRef: SYNTHETIC_DEMO_SUBJECT_REF,
     startedAtMs: Date.now(),
     ...(auth === undefined ? {} : { auth }),
+    auditRead,
     partner: {
       authenticator,
       idempotency: createPartnerIdempotency({ config, clock, ids, keys: idempotencyKeys }),
