@@ -57,6 +57,12 @@ function navIcon(href: string): ReactNode {
         <path d="M9 9v0M9 13v0M9 17v0M15 9v0M15 13v0M15 17v0" />
       </>
     ),
+    '/docs': (
+      <>
+        <path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+        <path d="M14 3v5h5M8 13h7M8 17h7" />
+      </>
+    ),
   };
   return <svg {...common}>{paths[href] ?? <rect x="4" y="4" width="16" height="16" rx="3" />}</svg>;
 }
@@ -76,15 +82,22 @@ export function Sidebar() {
       router.refresh();
     }
   };
-  // Role-aware hiding only applies once an active membership is resolved. While loading, or if
-  // no membership resolves, show the full nav — the API remains the real authorization boundary.
-  const items = NAV_ITEMS.filter(
-    (item) =>
+  // Platform-operator items (partner provisioning, API activity) are shown only to members of a
+  // PLATFORM organization — never to customer tenants, and never flashed while identity is still
+  // resolving. Everything else is fail-open (shown during load / when no membership resolves),
+  // since the API remains the real authorization boundary.
+  const isPlatform = activeMembership?.organizationType === 'PLATFORM';
+  const items = NAV_ITEMS.filter((item) => {
+    if (item.platformOnly === true) {
+      return isPlatform;
+    }
+    return (
       loading ||
       activeMembership === null ||
       item.permission === undefined ||
-      hasPermission(item.permission),
-  );
+      hasPermission(item.permission)
+    );
+  });
 
   const slug = activeMembership?.organizationSlug ?? 'operations';
   const orgName = slug
@@ -106,25 +119,36 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
         {items.map((item) => {
-          const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? 'page' : undefined}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                active
-                  ? 'bg-[var(--t-card-2)] font-semibold text-slate-100'
-                  : 'font-medium text-slate-400 hover:bg-[var(--t-card-2)] hover:text-slate-200'
-              }`}
-            >
+          const active =
+            !item.external && (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href));
+          const className = `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+            active
+              ? 'bg-[var(--t-card-2)] font-semibold text-slate-100'
+              : 'font-medium text-slate-400 hover:bg-[var(--t-card-2)] hover:text-slate-200'
+          }`;
+          const inner = (
+            <>
               <span className={active ? 'text-sky-400' : 'text-slate-400'}>{navIcon(item.href)}</span>
               <span className="flex-1">{item.label}</span>
+              {item.external && (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500">
+                  <path d="M7 17L17 7M8 7h9v9" />
+                </svg>
+              )}
               {item.status === 'planned' && (
                 <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
                   soon
                 </span>
               )}
+            </>
+          );
+          return item.external ? (
+            <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
+              {inner}
+            </a>
+          ) : (
+            <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={className}>
+              {inner}
             </Link>
           );
         })}

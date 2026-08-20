@@ -14,7 +14,7 @@ import { Topbar } from './Topbar';
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === '/login' || pathname === '/signup') {
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/docs') {
     return <>{children}</>;
   }
 

@@ -5,11 +5,15 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 /**
- * Refreshes the Supabase session on the edge and reports who (if anyone) is signed in.
+ * Reads the Supabase session on the edge and reports who (if anyone) is signed in.
  *
- * The cookie plumbing follows the @supabase/ssr contract: cookies written during the refresh
- * are copied onto a fresh response so a rotated token reaches the browser. Only the user id
- * is returned — never the token — and it is used solely to decide whether to gate a route.
+ * This runs on every navigation, so it must be cheap: it uses `getSession()` (a local cookie
+ * read, refreshed only when the token has actually expired) rather than `getUser()` (a network
+ * round-trip to Supabase on every request). That is safe here because this check is only a UX
+ * gate — it decides whether to bounce an anonymous visitor to /login. The real security boundary
+ * is the API, which cryptographically verifies the JWT (JWKS) on every data request, so a forged
+ * cookie that slips past this gate still fails at the API. The cookie plumbing follows the
+ * @supabase/ssr contract so a rotated token reaches the browser; only the user id is returned.
  */
 export const updateSession = async (
   request: NextRequest,
@@ -31,6 +35,6 @@ export const updateSession = async (
     },
   });
 
-  const { data } = await supabase.auth.getUser();
-  return { response, userId: data.user?.id ?? null };
+  const { data } = await supabase.auth.getSession();
+  return { response, userId: data.session?.user?.id ?? null };
 };

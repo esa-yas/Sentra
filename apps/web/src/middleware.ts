@@ -13,7 +13,8 @@ import { updateSession } from '@/lib/supabase/middleware';
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const path = request.nextUrl.pathname;
-  const isPublic = path === '/login' || path === '/signup' || path.startsWith('/auth/');
+  const isPublic =
+    path === '/login' || path === '/signup' || path === '/docs' || path.startsWith('/auth/');
 
   // Fail closed: with no auth backend there is no way to prove a session, so the only thing a
   // visitor may reach is the public surface. This removes the former open "demo mode".

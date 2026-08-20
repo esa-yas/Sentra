@@ -44,6 +44,23 @@ export const createOperationsRouter = (container: Container): Router => {
   const rotateSecret = requirePermission(PERMISSIONS.PARTNER_ROTATE_SECRET);
   router.use(requirePermission(PERMISSIONS.ORGANIZATION_READ));
 
+  // Partner provisioning is a network-operator function: a customer tenant (BANK/TELECOM) must
+  // never see or manage partner connections, even though its owner holds partner:write for its
+  // own org. When auth is configured, require the active organization to be PLATFORM. (In
+  // demo/in-memory mode there is no auth context and the console is gated elsewhere.)
+  const assertPlatformOperator = (req: Request): void => {
+    if (container.auth === undefined) {
+      return;
+    }
+    const ctx = getAuthContext(req);
+    const membership = ctx?.principal.memberships.find(
+      (m) => m.organizationId === ctx.organizationId,
+    );
+    if (membership?.organizationType !== 'PLATFORM') {
+      throw new ForbiddenError('Partner integration is restricted to platform operators.');
+    }
+  };
+
   router.get('/operations/summary', async (req, res) => {
     res.json(await store.summary(resolveOrganizationId(req), config.runtime.nodeEnv));
   });
@@ -230,6 +247,7 @@ export const createOperationsRouter = (container: Container): Router => {
   });
 
   router.get('/operations/partners', async (req, res) => {
+    assertPlatformOperator(req);
     if (container.partner === undefined) {
       res.json({ items: [], degraded: true, detail: 'Partner directory requires real provider mode.' });
       return;
@@ -290,6 +308,7 @@ export const createOperationsRouter = (container: Container): Router => {
   };
 
   router.post('/operations/partners', partnerWrite, async (req, res) => {
+    assertPlatformOperator(req);
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
@@ -304,6 +323,7 @@ export const createOperationsRouter = (container: Container): Router => {
   });
 
   router.post('/operations/partners/:connectionId/keys', rotateSecret, async (req, res) => {
+    assertPlatformOperator(req);
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
@@ -317,6 +337,7 @@ export const createOperationsRouter = (container: Container): Router => {
   });
 
   router.post('/operations/partners/:connectionId/keys/:kid/revoke', rotateSecret, async (req, res) => {
+    assertPlatformOperator(req);
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
@@ -330,6 +351,7 @@ export const createOperationsRouter = (container: Container): Router => {
   });
 
   router.post('/operations/partners/:connectionId/revoke', partnerWrite, async (req, res) => {
+    assertPlatformOperator(req);
     refuseProductionAdmin();
     if (container.partner === undefined) {
       throw new ForbiddenError('Partner administration requires real provider mode.');
