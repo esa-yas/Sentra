@@ -43,6 +43,17 @@ enum OrganizationStatus {
   ARCHIVED
 }
 
+/// Go-live lifecycle, distinct from the operational `status`. A newly signed-up tenant starts
+/// in SANDBOX and may only exercise sandbox credentials; PLATFORM administrators move it to
+/// APPROVED (production) after review, or to NEEDS_CONTACT when they want to speak first.
+enum OrganizationApprovalStatus {
+  SANDBOX
+  PENDING_REVIEW
+  NEEDS_CONTACT
+  APPROVED
+  DECLINED
+}
+
 enum MemberRole {
   OWNER
   ADMIN
@@ -160,6 +171,11 @@ model Organization {
   legalName       String
   type            OrganizationType
   status          OrganizationStatus @default(ACTIVE)
+  /// Go-live lifecycle. New self-service signups start in SANDBOX; existing tenants are
+  /// grandfathered to APPROVED by the introducing migration.
+  approvalStatus    OrganizationApprovalStatus @default(SANDBOX)
+  /// When the approval status last changed (review decision, go-live request, etc.).
+  approvalUpdatedAt DateTime?
   /// ISO 3166-1 alpha-2. Drives consent policy and retention defaults.
   jurisdiction    String             @db.Char(2)
   /// Where this tenant's data must remain. Recorded from day one so a residency
