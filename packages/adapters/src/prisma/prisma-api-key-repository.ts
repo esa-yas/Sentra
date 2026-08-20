@@ -16,6 +16,7 @@ const toRecord = (row: ApiKeyRow): ApiKeyRecord => ({
   name: row.name,
   publishableKey: row.publishableKey,
   secretHash: row.secretHash,
+  secretLookup: row.secretLookup,
   secretLast4: row.secretLast4,
   status: row.status,
   lastUsedAt: row.lastUsedAt,
@@ -43,6 +44,7 @@ export class PrismaApiKeyRepository implements ApiKeyRepository {
         name: input.name,
         publishableKey: input.publishableKey,
         secretHash: input.secretHash,
+        secretLookup: input.secretLookup,
         secretLast4: input.secretLast4,
         createdBy: input.createdBy,
         correlationId: input.correlationId,
@@ -61,6 +63,14 @@ export class PrismaApiKeyRepository implements ApiKeyRepository {
     scope?: TransactionScope,
   ): Promise<ApiKeyRecord | null> {
     const row = await this.exec(scope).apiKey.findUnique({ where: { publishableKey } });
+    return row === null ? null : toRecord(row);
+  }
+
+  public async findBySecretLookup(
+    secretLookup: string,
+    scope?: TransactionScope,
+  ): Promise<ApiKeyRecord | null> {
+    const row = await this.exec(scope).apiKey.findUnique({ where: { secretLookup } });
     return row === null ? null : toRecord(row);
   }
 

@@ -14,6 +14,7 @@ import { createMembersRouter } from './routes/members';
 import { createApiKeysRouter } from './routes/api-keys';
 import { createOperationsRouter } from './routes/operations';
 import { createOrgsRouter } from './routes/orgs';
+import { createDeveloperApiRouter } from './routes/v1-developer';
 import { createPartnerAdminRouter } from './routes/v1-admin';
 import { createPartnerIngestRouter } from './routes/v1-ingest';
 
@@ -55,6 +56,7 @@ export const createApp = (container: Container): Express => {
   app.use('/api', createMembersRouter(container));
   app.use('/api', createAuditRouter(container));
   app.use('/api', createOperationsRouter(container));
+  app.use('/v1', createDeveloperApiRouter(container));
   app.use('/v1', createPartnerAdminRouter(container));
   app.use('/v1', createPartnerIngestRouter(container));
 

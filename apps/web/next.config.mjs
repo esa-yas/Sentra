@@ -70,6 +70,9 @@ const nextConfig = {
   async rewrites() {
     return [
       { source: '/api/:path*', destination: `${apiOrigin}/api/:path*` },
+      // The public developer API (documented at /docs) is reachable same-origin so the docs'
+      // "try it" console can call it without CORS.
+      { source: '/v1/:path*', destination: `${apiOrigin}/v1/:path*` },
       { source: '/health', destination: `${apiOrigin}/health` },
       { source: '/ready', destination: `${apiOrigin}/ready` },
     ];

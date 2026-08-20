@@ -12,6 +12,7 @@ import {
   type ApiKeyView,
 } from '@sentra/contracts';
 import { getCorrelationId } from '@sentra/observability';
+import { createHash } from 'node:crypto';
 import type {
   ApiKeyRecord,
   ApiKeyRepository,
@@ -42,6 +43,16 @@ export interface ApiKeyAdminDeps {
 
 const SECRET_WARNING =
   'This secret key is shown once and cannot be retrieved again. Store it in a secret manager now.';
+
+/** Deterministic lookup value for a secret key — high-entropy input, so SHA-256 is sufficient. */
+const secretLookupOf = (secret: string): string => createHash('sha256').update(secret).digest('hex');
+
+/** The tenant + environment an authenticated API key resolves to. */
+export interface AuthenticatedApiKey {
+  readonly keyId: string;
+  readonly organizationId: string;
+  readonly environment: ApiKeyEnvironment;
+}
 
 const toView = (record: ApiKeyRecord): ApiKeyView => ({
   id: record.id,
@@ -77,6 +88,25 @@ export class ApiKeyAdmin {
     };
   }
 
+  /**
+   * Resolves a bearer secret key (`sk_...`) to its organization and environment, or null when the
+   * key is unknown or revoked. Used by the public API edge to authenticate a developer request.
+   */
+  public async authenticate(secret: string): Promise<AuthenticatedApiKey | null> {
+    if (!secret.startsWith('sk_')) {
+      return null;
+    }
+    const record = await this.deps.apiKeys.findBySecretLookup(secretLookupOf(secret));
+    if (record === null || record.status !== 'ACTIVE') {
+      return null;
+    }
+    return {
+      keyId: record.id,
+      organizationId: record.organizationId,
+      environment: record.environment,
+    };
+  }
+
   public async create(
     organizationId: string,
     actor: ApiKeyActor,
@@ -106,6 +136,7 @@ export class ApiKeyAdmin {
           name: input.name,
           publishableKey,
           secretHash,
+          secretLookup: secretLookupOf(secretKey),
           secretLast4: secretKey.slice(-4),
           createdBy: actor.userId,
           correlationId,

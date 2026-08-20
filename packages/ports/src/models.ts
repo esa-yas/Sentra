@@ -55,6 +55,7 @@ export interface ApiKeyRecord {
   name: string;
   publishableKey: string;
   secretHash: string;
+  secretLookup: string | null;
   secretLast4: string;
   status: ApiKeyStatus;
   lastUsedAt: Date | null;

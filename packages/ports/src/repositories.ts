@@ -100,6 +100,7 @@ export interface CreateApiKeyInput {
   readonly name: string;
   readonly publishableKey: string;
   readonly secretHash: string;
+  readonly secretLookup: string;
   readonly secretLast4: string;
   readonly createdBy: string | null;
   readonly correlationId: string;
@@ -110,6 +111,11 @@ export interface ApiKeyRepository {
   findById(id: string, scope?: TransactionScope): Promise<ApiKeyRecord | null>;
   findByPublishableKey(
     publishableKey: string,
+    scope?: TransactionScope,
+  ): Promise<ApiKeyRecord | null>;
+  /** Look up an ACTIVE key by the SHA-256 of its secret, for authenticating an API call. */
+  findBySecretLookup(
+    secretLookup: string,
     scope?: TransactionScope,
   ): Promise<ApiKeyRecord | null>;
   listForOrganization(

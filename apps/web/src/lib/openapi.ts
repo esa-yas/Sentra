@@ -27,8 +27,9 @@ callback, or recommend a block). **The bank always makes the final decision.** S
 2. **Grab a sandbox key.** In **API Keys**, create a key pair. You get a **publishable key**
    (\`pk_test_…\`) and a **secret key** (\`sk_test_…\`). The secret is shown once — store it in a
    secret manager.
-3. **Make your first call.** Evaluate a payment (see *Evaluate a payment* below). Sandbox runs
-   against **synthetic data on an isolated network** — it never touches the live decision network.
+3. **Make your first call.** Evaluate a payment (see *Evaluate a payment* below) — you can run it
+   right here with **Send**, using your \`sk_test_\` key. Sandbox runs against **synthetic data on
+   an isolated network** — it never touches the live decision network.
 4. **Go live.** When you're ready, request production access from **Organization → Request
    production access**. After our team approves you, live keys (\`pk_live_…\` / \`sk_live_…\`)
    unlock and your traffic reaches the real network.
@@ -79,23 +80,18 @@ Every response carries an \`x-correlation-id\` header — include it when you co
     contact: { name: 'Sentra Developer Support', email: 'developers@sentra.example' },
   },
   servers: [
-    { url: 'https://sandbox.api.sentra.example', description: 'Sandbox — synthetic data, isolated network' },
-    { url: 'https://api.sentra.example', description: 'Production — live network (requires approval)' },
+    { url: '/', description: 'Sandbox — this origin, proxied to the Sentra API (synthetic data)' },
   ],
   security: [{ secretKey: [] }],
   tags: [
     { name: 'Payments', description: 'Submit a payment for real-time scam-risk evaluation.' },
-    { name: 'Risk signals', description: 'Submit scam-risk signals (e.g. suspicious-call indicators from a telecom).' },
-    { name: 'Recommendations', description: 'Retrieve the explainable recommendation for a decision.' },
-    { name: 'Cases', description: 'Retrieve a correlation case — the joined view across signals.' },
-    { name: 'Webhooks', description: 'Receive outcome and case updates as they happen.' },
   ],
   paths: {
-    '/v1/payment-intents': {
+    '/v1/evaluate': {
       post: {
         tags: ['Payments'],
         summary: 'Evaluate a payment',
-        operationId: 'evaluatePaymentIntent',
+        operationId: 'evaluatePayment',
         description:
           'Submit a payment intent as it happens and receive an explainable scam-risk recommendation. This is the core endpoint. No card numbers, account numbers, or credentials are ever accepted — send only the risk-relevant, consented fields below.',
         parameters: [
@@ -135,83 +131,6 @@ Every response carries an \`x-correlation-id\` header — include it when you co
           '401': { $ref: '#/components/responses/Unauthorized' },
           '429': { $ref: '#/components/responses/RateLimited' },
         },
-      },
-    },
-    '/v1/risk-events': {
-      post: {
-        tags: ['Risk signals'],
-        summary: 'Submit a risk signal',
-        operationId: 'submitRiskEvent',
-        description:
-          'Submit a scam-risk signal — for example, a telecom reporting a prolonged suspicious call to a subject. Signals are correlated with payment intents to raise or lower risk. Telecom signals must be signed; see *Authentication*.',
-        parameters: [
-          { name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/RiskEvent' },
-              example: {
-                subjectRef: 'sbj_9f2c1a',
-                signal: 'SUSPICIOUS_CALL',
-                callerReputation: 'KNOWN_BAD',
-                callDurationSeconds: 900,
-                observedAt: '2026-08-20T18:40:00.000Z',
-              },
-            },
-          },
-        },
-        responses: {
-          '202': {
-            description: 'Accepted for correlation.',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/Accepted' } } },
-          },
-          '400': { $ref: '#/components/responses/ValidationError' },
-          '401': { $ref: '#/components/responses/Unauthorized' },
-          '429': { $ref: '#/components/responses/RateLimited' },
-        },
-      },
-    },
-    '/v1/recommendations/{id}': {
-      get: {
-        tags: ['Recommendations'],
-        summary: 'Get a recommendation',
-        operationId: 'getRecommendation',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'dec_7b1f…' }],
-        responses: {
-          '200': { description: 'The recommendation.', content: { 'application/json': { schema: { $ref: '#/components/schemas/Recommendation' } } } },
-          '401': { $ref: '#/components/responses/Unauthorized' },
-          '404': { $ref: '#/components/responses/NotFound' },
-        },
-      },
-    },
-    '/v1/cases/{id}': {
-      get: {
-        tags: ['Cases'],
-        summary: 'Get a case',
-        operationId: 'getCase',
-        description: 'A correlation case is the joined view of the signals and the payment behind one decision.',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, example: 'case_3a9c…' }],
-        responses: {
-          '200': { description: 'The case.', content: { 'application/json': { schema: { $ref: '#/components/schemas/Case' } } } },
-          '401': { $ref: '#/components/responses/Unauthorized' },
-          '404': { $ref: '#/components/responses/NotFound' },
-        },
-      },
-    },
-    '/v1/webhooks': {
-      post: {
-        tags: ['Webhooks'],
-        summary: 'Webhook event (your endpoint)',
-        operationId: 'receiveWebhook',
-        description:
-          'Sentra POSTs events to the HTTPS endpoint you configure in the console. Each request is signed with an HMAC in the `Sentra-Signature` header — verify it before trusting the payload. Respond `2xx` within 5s; we retry with exponential backoff. Subscribe to `recommendation.issued`, `case.updated`, and `outcome.recorded`.',
-        requestBody: {
-          required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/WebhookEvent' } } },
-        },
-        responses: { '200': { description: 'Acknowledged.' } },
       },
     },
   },

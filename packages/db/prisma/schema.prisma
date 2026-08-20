@@ -387,6 +387,9 @@ model ApiKey {
   name           String
   publishableKey String            @unique
   secretHash     String
+  /// SHA-256 of the secret key, for constant-time O(1) lookup when authenticating an API call.
+  /// (The Argon2 `secretHash` is unsuitable for lookup because it is salted per row.)
+  secretLookup   String?           @unique
   secretLast4    String            @db.Char(4)
   status         ApiKeyStatus      @default(ACTIVE)
 
