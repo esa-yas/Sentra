@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DecisionListItem } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge, EmptyState, ErrorNotice, Panel, Skeleton, SyntheticTag } from '@/components/ui';
+import { Badge, EmptyState, ErrorNotice, Panel, Skeleton } from '@/components/ui';
 import { getCases, type ApiError } from '@/lib/api';
 import { actionClass, actionLabel, riskLevelClass } from '@/lib/theme';
 import { formatDateTime } from '@/lib/format';
@@ -56,7 +56,7 @@ export default function CasesPage() {
         ) : items.length === 0 ? (
           <EmptyState
             title="No cases yet"
-            description="Run a scenario in the Risk Simulator to create a synthetic case with a full timeline."
+            description="Cases appear here as the decision engine evaluates incoming risk signals."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -83,7 +83,6 @@ export default function CasesPage() {
                       <Badge className={actionClass[item.recommendedAction]}>
                         {actionLabel[item.recommendedAction] ?? item.recommendedAction}
                       </Badge>
-                      {item.synthetic && <span className="ml-2"><SyntheticTag /></span>}
                     </td>
                     <td className="py-2 pr-4 font-mono text-xs text-sky-300">{item.correlationId}</td>
                     <td className="py-2 text-right">

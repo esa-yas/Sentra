@@ -8,7 +8,7 @@ import type {
   ProviderHealth,
 } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge, EmptyState, ErrorNotice, Panel, Skeleton, StatCard, SyntheticTag } from '@/components/ui';
+import { Badge, EmptyState, ErrorNotice, Panel, Skeleton, StatCard } from '@/components/ui';
 import { providerStateClass } from '@/lib/theme';
 import { formatTime, humanizeCode } from '@/lib/format';
 import {
@@ -260,7 +260,6 @@ export default function QueuesPage() {
                           <td className="py-2 pr-3 font-mono text-slate-400" title={event.eventId}>{shorten(event.eventId)}</td>
                           <td className="py-2 pr-3">
                             {humanizeCode(event.eventType)} <span className="text-slate-600">v{event.schemaVersion}</span>
-                            {event.synthetic && <span className="ml-1"><SyntheticTag /></span>}
                           </td>
                           <td className="py-2 pr-3"><Badge className={outboxStatusClass[event.status]}>{event.status}</Badge></td>
                           <td className="py-2 pr-3 tabular-nums">{event.attempts}/{event.maxAttempts}</td>
@@ -327,7 +326,6 @@ export default function QueuesPage() {
                           <td className="py-2 pr-3">
                             {job.eventType === null ? job.name : humanizeCode(job.eventType)}
                             {job.eventVersion !== null && <span className="text-slate-600"> v{job.eventVersion}</span>}
-                            {job.synthetic && <span className="ml-1"><SyntheticTag /></span>}
                           </td>
                           <td className="py-2 pr-3"><Badge className={jobStateClass[job.state]}>{job.state}</Badge></td>
                           <td className="py-2 pr-3 tabular-nums">{job.attempts}/{job.maxAttempts}</td>

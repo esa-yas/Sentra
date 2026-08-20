@@ -1,7 +1,116 @@
 @import 'tailwindcss';
 
+/*
+ * Design tokens. Every surface, text, line, accent, and risk color is a CSS variable that
+ * flips with the theme. The existing Tailwind palette (slate / sky / emerald / amber / red)
+ * is remapped onto these tokens via `@theme inline`, so the whole console is light/dark-aware
+ * without rewriting utility classes — and new work uses the same tokens.
+ */
+@theme inline {
+  --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* surfaces + ink (mapped through the slate scale the app already uses) */
+  --color-slate-950: var(--t-ground);
+  --color-slate-900: var(--t-card);
+  --color-slate-800: var(--t-line);
+  --color-slate-700: var(--t-line-2);
+  --color-slate-600: var(--t-faint-2);
+  --color-slate-500: var(--t-faint);
+  --color-slate-400: var(--t-muted);
+  --color-slate-300: var(--t-muted-2);
+  --color-slate-200: var(--t-ink-2);
+  --color-slate-100: var(--t-ink);
+  --color-slate-50: var(--t-ink);
+
+  /* accent (sky) */
+  --color-sky-300: var(--t-accent-2);
+  --color-sky-400: var(--t-accent);
+  --color-sky-500: var(--t-accent);
+  --color-sky-600: var(--t-accent-strong);
+
+  /* risk semantics: green = safe, amber = caution, red = danger */
+  --color-emerald-300: var(--t-low);
+  --color-emerald-400: var(--t-low);
+  --color-emerald-500: var(--t-low);
+  --color-amber-300: var(--t-med);
+  --color-amber-400: var(--t-med);
+  --color-amber-500: var(--t-med);
+  --color-red-200: var(--t-crit);
+  --color-red-300: var(--t-crit);
+  --color-red-400: var(--t-crit);
+  --color-red-500: var(--t-crit);
+  --color-rose-300: var(--t-crit);
+  --color-rose-400: var(--t-crit);
+  --color-fuchsia-300: var(--t-synthetic);
+  --color-fuchsia-500: var(--t-synthetic);
+}
+
+/* Light is the default (no data-theme attribute). */
 :root {
+  color-scheme: light;
+  --t-ground: #f4f6f9;
+  --t-card: #ffffff;
+  --t-card-2: #f6f8fb;
+  --t-ink: #0f1622;
+  --t-ink-2: #29323f;
+  --t-muted: #57616f;
+  --t-muted-2: #414b59;
+  --t-faint: #8b94a2;
+  --t-faint-2: #a7afbb;
+  --t-line: #eaecf1;
+  --t-line-2: #dfe3ea;
+  --t-accent: #6d4ef0;
+  --t-accent-2: #8b6df2;
+  --t-accent-strong: #5b3fe0;
+  --t-low: #12805a;
+  --t-med: #94620f;
+  --t-high: #c2622a;
+  --t-crit: #c2382a;
+  --t-synthetic: #9333a8;
+  --t-shadow: 0 1px 2px rgba(15, 22, 34, 0.04), 0 12px 28px -18px rgba(15, 22, 34, 0.16);
+
+  /* chart + icon-tile palette (matches the dashboard reference) */
+  --c-purple: #6d4ef0;
+  --c-red: #f0473f;
+  --c-yellow: #f5b400;
+  --c-blue: #3b82f6;
+  --c-orange: #f97316;
+  --c-green: #16a34a;
+  --c-track: #eef0f4;
+}
+
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --t-ground: #0b0e15;
+  --t-card: #141a25;
+  --t-card-2: #1a2130;
+  --t-ink: #eef1f6;
+  --t-ink-2: #d4dae2;
+  --t-muted: #98a2b3;
+  --t-muted-2: #b6bec9;
+  --t-faint: #69727f;
+  --t-faint-2: #7f8896;
+  --t-line: #242c3a;
+  --t-line-2: #2d3646;
+  --t-accent: #9a80f5;
+  --t-accent-2: #b09bf8;
+  --t-accent-strong: #7c5cf0;
+  --t-low: #3fbf90;
+  --t-med: #e0a83a;
+  --t-high: #ec8b4e;
+  --t-crit: #f0705a;
+  --t-synthetic: #cf8fe6;
+  --t-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 30px -16px rgba(0, 0, 0, 0.6);
+
+  /* chart + icon-tile palette (dark) */
+  --c-purple: #8b6df2;
+  --c-red: #f4685f;
+  --c-yellow: #f6c74d;
+  --c-blue: #5b9bf8;
+  --c-orange: #fb923c;
+  --c-green: #34d399;
+  --c-track: #232b39;
 }
 
 html,
@@ -10,18 +119,28 @@ body {
 }
 
 body {
-  background-color: #020617;
-  color: #e2e8f0;
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--t-ground);
+  color: var(--t-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--t-accent) 24%, transparent);
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: color-mix(in srgb, var(--t-faint) 45%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
   border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--t-faint) 70%, transparent);
+  background-clip: padding-box;
 }

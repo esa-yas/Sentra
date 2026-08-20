@@ -1,5 +1,8 @@
+import { simulatorEvaluateRequestSchema } from '@sentra/contracts';
+import { generateCorrelationId } from '@sentra/observability';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import type { Container } from '../container';
 import { buildTestApp } from './test-app';
 
 const APP_SCAM_BODY = {
@@ -13,9 +16,25 @@ const APP_SCAM_BODY = {
   scamCampaignMatch: true,
 };
 
+/**
+ * Seeds one evaluation directly through the core decision engine — the same path the real
+ * partner-ingest route uses — so the operations read models have data to reflect. (The demo
+ * simulator HTTP route was removed; the engine it wrapped is unchanged.)
+ */
+const seedEvaluation = async (container: Container): Promise<void> => {
+  const input = simulatorEvaluateRequestSchema.parse(APP_SCAM_BODY);
+  const output = await container.evaluate.execute(input, {
+    correlationId: generateCorrelationId(),
+    actorLabel: 'test:seed',
+    organizationId: container.syntheticOrganizationId,
+    subjectRef: container.syntheticSubjectRef,
+  });
+  container.store.recordEvaluation(output);
+};
+
 describe('operations read models', () => {
   it('summary starts empty and reflects an evaluation', async () => {
-    const { app } = await buildTestApp();
+    const { app, container } = await buildTestApp();
 
     const before = await request(app).get('/api/operations/summary');
     expect(before.status).toBe(200);
@@ -23,7 +42,7 @@ describe('operations read models', () => {
     expect(before.body.volume.paymentIntentsReceived).toBe(0);
     expect(before.body.caseSeverity.critical).toBe(0);
 
-    await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
+    await seedEvaluation(container);
 
     const after = await request(app).get('/api/operations/summary');
     expect(after.body.volume.paymentIntentsReceived).toBe(1);
@@ -35,8 +54,8 @@ describe('operations read models', () => {
   });
 
   it('lists events with a redacted payload preview and supports the id lookup', async () => {
-    const { app } = await buildTestApp();
-    await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
+    const { app, container } = await buildTestApp();
+    await seedEvaluation(container);
 
     const list = await request(app).get('/api/events');
     expect(list.status).toBe(200);
@@ -55,8 +74,8 @@ describe('operations read models', () => {
   });
 
   it('filters events by type', async () => {
-    const { app } = await buildTestApp();
-    await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
+    const { app, container } = await buildTestApp();
+    await seedEvaluation(container);
 
     const filtered = await request(app)
       .get('/api/events')
@@ -70,13 +89,13 @@ describe('operations read models', () => {
   });
 
   it('serves the latest flow and the development status', async () => {
-    const { app } = await buildTestApp();
+    const { app, container } = await buildTestApp();
 
     const emptyFlow = await request(app).get('/api/operations/flow/latest');
     expect(emptyFlow.status).toBe(200);
     expect(emptyFlow.body.stages).toHaveLength(11);
 
-    await request(app).post('/api/simulator/evaluate').send(APP_SCAM_BODY);
+    await seedEvaluation(container);
 
     const flow = await request(app).get('/api/operations/flow/latest');
     expect(flow.body.stages.find((s: { stage: string }) => s.stage === 'RECOMMENDATION').status).toBe(

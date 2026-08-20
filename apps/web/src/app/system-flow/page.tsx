@@ -86,7 +86,7 @@ function SystemFlowInner() {
         <Panel>
           <EmptyState
             title="No run yet"
-            description="Run a scenario in the Risk Simulator to watch the pipeline light up here."
+            description="The pipeline lights up here as the decision engine processes a case."
           />
         </Panel>
       ) : (
