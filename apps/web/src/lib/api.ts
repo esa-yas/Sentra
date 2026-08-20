@@ -7,7 +7,9 @@ import type {
   ApiKeyListResponse,
   ApiKeyView,
   CreateApiKeyRequest,
+  GoLiveRequestResponse,
   OperationsSummary,
+  OrganizationDetailResponse,
   OrganizationSignupRequest,
   OrganizationSignupResponse,
   OutboxEventView,
@@ -266,6 +268,12 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     headers: { Authorization: `Bearer ${token}` },
     body: '{}',
   });
+
+export const getCurrentOrg = (): Promise<ApiResult<OrganizationDetailResponse>> =>
+  apiFetch('/api/orgs/current');
+
+export const requestGoLive = (): Promise<ApiResult<GoLiveRequestResponse>> =>
+  apiFetch('/api/orgs/request-go-live', { method: 'POST', body: '{}' });
 
 export const getApiKeys = (): Promise<ApiResult<ApiKeyListResponse>> => apiFetch('/api/keys');
 

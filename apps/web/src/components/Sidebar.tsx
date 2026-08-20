@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, type ReactNode } from 'react';
 import { useSession } from '@/lib/session';
 import { NAV_ITEMS } from './nav';
 
@@ -51,13 +51,31 @@ function navIcon(href: string): ReactNode {
       </>
     ),
     '/audit-chain': p('M9 12a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3 3 3 0 0 0-3-3M15 12a3 3 0 0 0-3-3h-1a3 3 0 0 0-3 3'),
+    '/organization': (
+      <>
+        <path d="M3 21h18M5 21V7l7-4 7 4v14" />
+        <path d="M9 9v0M9 13v0M9 17v0M15 9v0M15 13v0M15 17v0" />
+      </>
+    ),
   };
   return <svg {...common}>{paths[href] ?? <rect x="4" y="4" width="16" height="16" rx="3" />}</svg>;
 }
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { hasPermission, loading, activeMembership } = useSession();
+  const router = useRouter();
+  const { hasPermission, loading, activeMembership, user, signOut } = useSession();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const onSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
+  };
   // Role-aware hiding only applies once an active membership is resolved. While loading, or if
   // no membership resolves, show the full nav — the API remains the real authorization boundary.
   const items = NAV_ITEMS.filter(
@@ -73,7 +91,9 @@ export function Sidebar() {
     .split(/[-_]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
-  const orgRole = activeMembership?.role ?? 'Operations Console';
+  const userName = user?.displayName ?? 'Operator';
+  const userEmail = user?.email ?? '';
+  const initials = userName.trim().slice(0, 2).toUpperCase();
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
@@ -110,20 +130,32 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="space-y-3 px-3 pb-3 pt-2">
+      <div className="space-y-2 px-3 pb-3 pt-2">
         <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-[var(--t-card-2)] px-3 py-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500 text-xs font-bold text-white">
-            {orgName.charAt(0).toUpperCase()}
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white">
+            {initials}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-100">{orgName}</p>
-            <p className="truncate text-[11px] capitalize text-slate-500">{orgRole}</p>
+            <p className="truncate text-sm font-semibold text-slate-100">{userName}</p>
+            <p className="truncate text-[11px] text-slate-500">{userEmail || orgName}</p>
           </div>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
-            <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
-          </svg>
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={signingOut}
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-red-300 disabled:opacity-50"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3" />
+            </svg>
+          </button>
         </div>
-        <p className="px-2 text-center text-[11px] text-slate-500">© 2026 Sentra · Version 1a</p>
+        <div className="flex items-center justify-between px-2">
+          <span className="text-[11px] text-slate-500">{orgName}</span>
+          <span className="text-[11px] text-slate-600">v1a</span>
+        </div>
       </div>
     </aside>
   );

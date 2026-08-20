@@ -2,6 +2,7 @@ import type {
   ApiKeyEnvironment,
   MemberRole,
   MemberStatus,
+  OrganizationApprovalStatus,
   OrganizationStatus,
   OrganizationType,
   PartnerConnectionKind,
@@ -74,6 +75,8 @@ export interface CreateOrganizationInput {
 export interface UpdateOrganizationInput {
   readonly legalName?: string;
   readonly status?: OrganizationStatus;
+  readonly approvalStatus?: OrganizationApprovalStatus;
+  readonly approvalUpdatedAt?: Date;
   readonly defaultCurrency?: string;
 }
 

@@ -1,7 +1,14 @@
-import { InvalidTokenError, organizationSignupRequestSchema } from '@sentra/contracts';
+import {
+  ForbiddenError,
+  InvalidTokenError,
+  PERMISSIONS,
+  organizationSignupRequestSchema,
+} from '@sentra/contracts';
 import { getCorrelationId } from '@sentra/observability';
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import type { Container } from '../container';
+import { createAuthorizer } from '../auth/require-permission';
+import { getAuthContext } from '../auth/request-context';
 import { bearerTokenFrom } from '../auth/user-authentication';
 import { parseOrThrow } from '../validation';
 
@@ -16,6 +23,22 @@ import { parseOrThrow } from '../validation';
 export const createOrgsRouter = (container: Container): Router => {
   const router = Router();
   const auth = container.auth;
+  const { requirePermission } = createAuthorizer(container.auth?.resolve);
+  const orgRead = requirePermission(PERMISSIONS.ORGANIZATION_READ);
+  const orgWrite = requirePermission(PERMISSIONS.ORGANIZATION_WRITE);
+
+  const context = (
+    req: Request,
+  ): { organizationId: string; actor: { userId: string; label: string } } => {
+    const ctx = getAuthContext(req);
+    if (auth === undefined || ctx === undefined) {
+      throw new ForbiddenError('This action requires an authenticated member.');
+    }
+    return {
+      organizationId: ctx.organizationId,
+      actor: { userId: ctx.principal.id, label: ctx.principal.label },
+    };
+  };
 
   router.post('/orgs/signup', async (req, res) => {
     if (auth === undefined) {
@@ -34,6 +57,16 @@ export const createOrgsRouter = (container: Container): Router => {
       correlationId: getCorrelationId(),
     });
     res.status(201).json(result);
+  });
+
+  router.get('/orgs/current', orgRead, async (req, res) => {
+    const { organizationId } = context(req);
+    res.json(await auth!.orgAdmin.getCurrent(organizationId));
+  });
+
+  router.post('/orgs/request-go-live', orgWrite, async (req, res) => {
+    const { organizationId, actor } = context(req);
+    res.json(await auth!.orgAdmin.requestGoLive(organizationId, actor));
   });
 
   return router;

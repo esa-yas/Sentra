@@ -23,4 +23,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Partners', href: '/partners', status: 'live', permission: 'partner:read' },
   { label: 'Members', href: '/members', status: 'live', permission: 'member:read' },
   { label: 'Audit Chain', href: '/audit-chain', status: 'live', permission: 'audit:read' },
+  { label: 'Organization', href: '/organization', status: 'live', permission: 'organization:read' },
 ];

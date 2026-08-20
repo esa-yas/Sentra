@@ -45,6 +45,7 @@ import type { AuditReadModel, Clock, IdGenerator, OperationsReadModel } from '@s
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
 import { createApiKeyAdmin, type ApiKeyAdmin } from './auth/api-key-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
+import { createOrgAdmin, type OrgAdmin } from './auth/org-admin';
 import { createOrgSignup, type OrgSignup } from './auth/org-signup';
 import { createPartnerAdmin, type PartnerAdmin } from './partner/admin';
 import { createPartnerAuthenticator, type PartnerAuthenticator } from './partner/authenticator';
@@ -82,6 +83,7 @@ export interface UserAuthRuntime {
   readonly resolve: ResolveUserPrincipalUseCase;
   readonly memberAdmin: MemberAdmin;
   readonly orgSignup: OrgSignup;
+  readonly orgAdmin: OrgAdmin;
   readonly apiKeyAdmin: ApiKeyAdmin;
 }
 
@@ -210,6 +212,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
       }),
       memberAdmin: createMemberAdmin({ memberships, users, unitOfWork, audit, ids, clock }),
       orgSignup: createOrgSignup({ organizations, memberships, unitOfWork, audit, ids, clock }),
+      orgAdmin: createOrgAdmin({ organizations, unitOfWork, audit, clock }),
       apiKeyAdmin: createApiKeyAdmin({
         organizations,
         apiKeys,

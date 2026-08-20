@@ -67,6 +67,36 @@ export const organizationSignupResponseSchema = z.object({
 
 export type OrganizationSignupResponse = z.infer<typeof organizationSignupResponseSchema>;
 
+/** The signed-in member's current organization, including its go-live approval status. */
+export const organizationDetailResponseSchema = z.object({
+  id: ulidSchema,
+  slug: organizationSlugSchema,
+  legalName: z.string(),
+  type: organizationTypeSchema,
+  jurisdiction: jurisdictionSchema,
+  defaultCurrency: currencySchema,
+  approvalStatus: organizationApprovalStatusSchema,
+  createdAt: z.string().datetime(),
+});
+
+export type OrganizationDetailResponse = z.infer<typeof organizationDetailResponseSchema>;
+
+/** A request to be moved out of sandbox into production; reviewed by the Sentra team. */
+export const goLiveRequestSchema = z
+  .object({
+    /** Optional note to the reviewer (use case, expected volume, timeline). */
+    message: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export type GoLiveRequest = z.infer<typeof goLiveRequestSchema>;
+
+export const goLiveRequestResponseSchema = z.object({
+  approvalStatus: organizationApprovalStatusSchema,
+});
+
+export type GoLiveRequestResponse = z.infer<typeof goLiveRequestResponseSchema>;
+
 export const updateOrganizationRequestSchema = z
   .object({
     legalName: z.string().min(2).max(200).optional(),

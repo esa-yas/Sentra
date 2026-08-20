@@ -79,6 +79,8 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
       data: {
         ...(input.legalName === undefined ? {} : { legalName: input.legalName }),
         ...(input.status === undefined ? {} : { status: input.status }),
+        ...(input.approvalStatus === undefined ? {} : { approvalStatus: input.approvalStatus }),
+        ...(input.approvalUpdatedAt === undefined ? {} : { approvalUpdatedAt: input.approvalUpdatedAt }),
         ...(input.defaultCurrency === undefined ? {} : { defaultCurrency: input.defaultCurrency }),
       },
     });
