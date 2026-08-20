@@ -58,6 +58,15 @@ const apiOrigin = process.env.SENTRA_API_ORIGIN ?? 'http://127.0.0.1:3001';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Allow loading the dev server over the LAN (e.g. http://192.168.1.3:3000) without Next's
+  // cross-origin dev warning. Update the IP if your machine's LAN address changes; extra values
+  // can be supplied via SENTRA_DEV_ORIGINS (comma-separated hostnames).
+  allowedDevOrigins: [
+    'localhost',
+    '127.0.0.1',
+    '192.168.1.3',
+    ...(process.env.SENTRA_DEV_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+  ],
   async rewrites() {
     return [
       { source: '/api/:path*', destination: `${apiOrigin}/api/:path*` },

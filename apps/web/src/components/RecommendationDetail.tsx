@@ -126,7 +126,7 @@ export function RecommendationDetail({ recommendation }: { recommendation: Recom
             </thead>
             <tbody className="font-mono text-slate-300">
               {r.auditEvents.map((event) => (
-                <tr key={event.id} className="border-b border-slate-900">
+                <tr key={event.id} className="border-b border-slate-800">
                   <td className="py-2 pr-4 tabular-nums">{event.sequence}</td>
                   <td className="py-2 pr-4 font-sans">{humanizeCode(event.action)}</td>
                   <td className="py-2 pr-4 text-slate-500">{event.hashPrev.slice(0, 12)}…</td>

@@ -61,7 +61,7 @@ export default function CasesPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="text-xs text-slate-500">
+              <thead className="text-[11px] uppercase tracking-wide text-slate-500">
                 <tr className="border-b border-slate-800">
                   <th className="py-2 pr-4 font-medium">Evaluated</th>
                   <th className="py-2 pr-4 font-medium">Subject</th>
@@ -74,7 +74,7 @@ export default function CasesPage() {
               </thead>
               <tbody className="text-slate-300">
                 {items.map((item) => (
-                  <tr key={item.decisionId} className="border-b border-slate-900 hover:bg-slate-900/50">
+                  <tr key={item.decisionId} className="border-b border-slate-800 hover:bg-[var(--t-card-2)]">
                     <td className="py-2 pr-4 text-xs text-slate-400">{formatDateTime(item.evaluatedAt)}</td>
                     <td className="py-2 pr-4 font-mono text-xs">{item.subjectRef}</td>
                     <td className="py-2 pr-4 tabular-nums">{item.riskScore}</td>
