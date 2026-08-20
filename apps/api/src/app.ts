@@ -11,6 +11,7 @@ import { createAuthRouter } from './routes/auth';
 import { createAuditRouter } from './routes/audit';
 import { createHealthRouter } from './routes/health';
 import { createMembersRouter } from './routes/members';
+import { createApiKeysRouter } from './routes/api-keys';
 import { createOperationsRouter } from './routes/operations';
 import { createOrgsRouter } from './routes/orgs';
 import { createPartnerAdminRouter } from './routes/v1-admin';
@@ -50,6 +51,7 @@ export const createApp = (container: Container): Express => {
   app.use('/', createHealthRouter(container));
   app.use('/api', createAuthRouter(container));
   app.use('/api', createOrgsRouter(container));
+  app.use('/api', createApiKeysRouter(container));
   app.use('/api', createMembersRouter(container));
   app.use('/api', createAuditRouter(container));
   app.use('/api', createOperationsRouter(container));

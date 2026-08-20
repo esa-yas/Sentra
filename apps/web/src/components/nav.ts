@@ -18,6 +18,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Overview', href: '/', status: 'live', permission: 'organization:read' },
   { label: 'Scam Cases', href: '/cases', status: 'live', permission: 'recommendation:read' },
+  { label: 'API Keys', href: '/keys', status: 'live', permission: 'partner:read' },
   { label: 'API Activity', href: '/api-activity', status: 'live', permission: 'partner:read' },
   { label: 'Partners', href: '/partners', status: 'live', permission: 'partner:read' },
   { label: 'Members', href: '/members', status: 'live', permission: 'member:read' },

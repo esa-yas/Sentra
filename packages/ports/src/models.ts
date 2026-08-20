@@ -1,9 +1,12 @@
 import type {
   ActorType,
+  ApiKeyEnvironment,
+  ApiKeyStatus,
   AuditOutcome,
   DataClassification,
   MemberRole,
   MemberStatus,
+  OrganizationApprovalStatus,
   OrganizationStatus,
   OrganizationType,
   PartnerConnectionKind,
@@ -35,6 +38,7 @@ export interface OrganizationRecord {
   legalName: string;
   type: OrganizationType;
   status: OrganizationStatus;
+  approvalStatus: OrganizationApprovalStatus;
   jurisdiction: string;
   dataResidency: string;
   defaultCurrency: string;
@@ -42,6 +46,21 @@ export interface OrganizationRecord {
   updatedAt: Date;
   createdBy: string | null;
   source: string;
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  organizationId: string;
+  environment: ApiKeyEnvironment;
+  name: string;
+  publishableKey: string;
+  secretHash: string;
+  secretLast4: string;
+  status: ApiKeyStatus;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+  createdBy: string | null;
+  revokedAt: Date | null;
 }
 
 export interface UserRecord {

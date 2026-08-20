@@ -29,6 +29,12 @@ function navIcon(href: string): ReactNode {
       </>
     ),
     '/cases': p('M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z'),
+    '/keys': (
+      <>
+        <circle cx="7.5" cy="15.5" r="3.5" />
+        <path d="M10 13l6-6M14 5l3 3M18.5 6.5l1.5 1.5" />
+      </>
+    ),
     '/api-activity': p('M8 6l-5 6 5 6M16 6l5 6-5 6'),
     '/partners': (
       <>

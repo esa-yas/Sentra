@@ -16,6 +16,7 @@ const toRecord = (row: OrganizationRow): OrganizationRecord => ({
   legalName: row.legalName,
   type: row.type,
   status: row.status,
+  approvalStatus: row.approvalStatus,
   jurisdiction: row.jurisdiction,
   dataResidency: row.dataResidency,
   defaultCurrency: row.defaultCurrency,

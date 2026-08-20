@@ -1,4 +1,5 @@
 import type {
+  ApiKeyEnvironment,
   MemberRole,
   MemberStatus,
   OrganizationStatus,
@@ -12,6 +13,7 @@ import type {
 } from '@sentra/contracts';
 import type { TransactionScope } from './unit-of-work';
 import type {
+  ApiKeyRecord,
   AuditEventRecord,
   IdempotencyRecord,
   IdentityLinkRecord,
@@ -86,6 +88,32 @@ export interface OrganizationRepository {
   ): Promise<OrganizationRecord>;
   /** Restricted to the identifiers the caller is already authorized for. */
   listByIds(ids: readonly string[], scope?: TransactionScope): Promise<readonly OrganizationRecord[]>;
+}
+
+export interface CreateApiKeyInput {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly environment: ApiKeyEnvironment;
+  readonly name: string;
+  readonly publishableKey: string;
+  readonly secretHash: string;
+  readonly secretLast4: string;
+  readonly createdBy: string | null;
+  readonly correlationId: string;
+}
+
+export interface ApiKeyRepository {
+  create(input: CreateApiKeyInput, scope?: TransactionScope): Promise<ApiKeyRecord>;
+  findById(id: string, scope?: TransactionScope): Promise<ApiKeyRecord | null>;
+  findByPublishableKey(
+    publishableKey: string,
+    scope?: TransactionScope,
+  ): Promise<ApiKeyRecord | null>;
+  listForOrganization(
+    organizationId: string,
+    scope?: TransactionScope,
+  ): Promise<readonly ApiKeyRecord[]>;
+  revoke(id: string, revokedAt: Date, scope?: TransactionScope): Promise<ApiKeyRecord>;
 }
 
 export interface CreateUserInput {

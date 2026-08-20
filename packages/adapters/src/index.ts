@@ -88,4 +88,8 @@ export {
   PrismaOrganizationRepository,
   createPrismaOrganizationRepository,
 } from './prisma/prisma-organization-repository';
+export {
+  PrismaApiKeyRepository,
+  createPrismaApiKeyRepository,
+} from './prisma/prisma-api-key-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';

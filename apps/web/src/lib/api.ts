@@ -3,6 +3,10 @@ import type {
   DevelopmentStatus,
   EventList,
   FlowRun,
+  ApiKeyCreatedResponse,
+  ApiKeyListResponse,
+  ApiKeyView,
+  CreateApiKeyRequest,
   OperationsSummary,
   OrganizationSignupRequest,
   OrganizationSignupResponse,
@@ -262,6 +266,16 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     headers: { Authorization: `Bearer ${token}` },
     body: '{}',
   });
+
+export const getApiKeys = (): Promise<ApiResult<ApiKeyListResponse>> => apiFetch('/api/keys');
+
+export const createApiKey = (
+  input: CreateApiKeyRequest,
+): Promise<ApiResult<ApiKeyCreatedResponse>> =>
+  apiFetch('/api/keys', { method: 'POST', body: JSON.stringify(input) });
+
+export const revokeApiKey = (keyId: string): Promise<ApiResult<ApiKeyView>> =>
+  apiFetch(`/api/keys/${encodeURIComponent(keyId)}/revoke`, { method: 'POST', body: '{}' });
 
 /** Creates a new sandbox organization owned by the signed-in user. Auth token attached by apiFetch. */
 export const signUpOrganization = (

@@ -19,6 +19,7 @@ import {
   createPrismaPartnerDirectory,
   createPrismaPartnerDomainStore,
   createPrismaPartnerSigningKeyRepository,
+  createPrismaApiKeyRepository,
   createPrismaIdentityLinkRepository,
   createPrismaMembershipRepository,
   createPrismaOrganizationRepository,
@@ -42,6 +43,7 @@ import {
 import type { Logger } from '@sentra/observability';
 import type { AuditReadModel, Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
+import { createApiKeyAdmin, type ApiKeyAdmin } from './auth/api-key-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
 import { createOrgSignup, type OrgSignup } from './auth/org-signup';
 import { createPartnerAdmin, type PartnerAdmin } from './partner/admin';
@@ -80,6 +82,7 @@ export interface UserAuthRuntime {
   readonly resolve: ResolveUserPrincipalUseCase;
   readonly memberAdmin: MemberAdmin;
   readonly orgSignup: OrgSignup;
+  readonly apiKeyAdmin: ApiKeyAdmin;
 }
 
 export interface Container {
@@ -194,6 +197,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     const identities = createPrismaIdentityLinkRepository(prisma, unitOfWork);
     const memberships = createPrismaMembershipRepository(prisma, unitOfWork);
     const organizations = createPrismaOrganizationRepository(prisma, unitOfWork);
+    const apiKeys = createPrismaApiKeyRepository(prisma, unitOfWork);
     auth = {
       resolve: createResolveUserPrincipalUseCase({
         clock,
@@ -206,6 +210,16 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
       }),
       memberAdmin: createMemberAdmin({ memberships, users, unitOfWork, audit, ids, clock }),
       orgSignup: createOrgSignup({ organizations, memberships, unitOfWork, audit, ids, clock }),
+      apiKeyAdmin: createApiKeyAdmin({
+        organizations,
+        apiKeys,
+        random: createNodeSecureRandom(),
+        hasher: createArgon2PasswordHasher(),
+        audit,
+        unitOfWork,
+        ids,
+        clock,
+      }),
     };
   }
 

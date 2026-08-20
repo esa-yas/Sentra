@@ -115,6 +115,18 @@ enum SigningKeyStatus {
   REVOKED
 }
 
+/// Which network a developer API key operates against. TEST keys are self-service and never
+/// touch the live decision network; LIVE keys require an APPROVED organization.
+enum ApiKeyEnvironment {
+  TEST
+  LIVE
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+}
+
 enum ActorType {
   USER
   PARTNER
@@ -195,6 +207,7 @@ model Organization {
 
   members            OrganizationMember[]
   partnerConnections PartnerConnection[]
+  apiKeys            ApiKey[]
   auditEvents        AuditEvent[]
   outboxEvents       OutboxEvent[]
   idempotencyKeys    IdempotencyKey[]
@@ -361,6 +374,35 @@ model PartnerSigningKey {
   @@unique([partnerConnectionId, kid])
   @@index([partnerConnectionId, status])
   @@map("partner_signing_keys")
+}
+
+/// A developer API key pair for an organization. The publishable key (`pk_test_…` / `pk_live_…`)
+/// is public and stored in the clear; the secret (`sk_test_…` / `sk_live_…`) is shown exactly
+/// once and only its Argon2id hash is persisted, alongside the last four characters for display.
+/// TEST keys are self-service; LIVE keys require an APPROVED organization.
+model ApiKey {
+  id             String            @id
+  organizationId String
+  environment    ApiKeyEnvironment
+  name           String
+  publishableKey String            @unique
+  secretHash     String
+  secretLast4    String            @db.Char(4)
+  status         ApiKeyStatus      @default(ACTIVE)
+
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  revokedAt  DateTime?
+
+  schemaVersion Int     @default(1)
+  correlationId String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([environment, status])
+  @@map("api_keys")
 }
 
 // ---------------------------------------------------------------------------
