@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import '@scalar/api-reference-react/style.css';
 import { openApiSpec } from '@/lib/openapi';
 
 // Scalar is a heavy client-only widget; load it without SSR so it hydrates cleanly. It renders
@@ -20,7 +21,7 @@ const ApiReference = dynamic(
 
 export default function DocsPage() {
   return (
-    <div className="h-screen overflow-hidden">
+    <div className="fixed inset-0 overflow-auto bg-[#0b0e15]">
       <ApiReference
         configuration={{
           content: openApiSpec,
