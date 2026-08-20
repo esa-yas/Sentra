@@ -4,6 +4,8 @@ import type {
   EventList,
   FlowRun,
   OperationsSummary,
+  OrganizationSignupRequest,
+  OrganizationSignupResponse,
   OutboxEventView,
   OutboxList,
   QueueActionResult,
@@ -259,6 +261,17 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: '{}',
+  });
+
+/** Creates a new sandbox organization owned by the signed-in user. Auth token attached by apiFetch. */
+export const signUpOrganization = (
+  input: OrganizationSignupRequest,
+  token?: string,
+): Promise<ApiResult<OrganizationSignupResponse>> =>
+  apiFetch('/api/orgs/signup', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    ...(token === undefined ? {} : { headers: { Authorization: `Bearer ${token}` } }),
   });
 
 export interface MemberRow {

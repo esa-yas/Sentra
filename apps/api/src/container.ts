@@ -21,6 +21,7 @@ import {
   createPrismaPartnerSigningKeyRepository,
   createPrismaIdentityLinkRepository,
   createPrismaMembershipRepository,
+  createPrismaOrganizationRepository,
   createPrismaUnitOfWork,
   createPrismaUserRepository,
   createRedisCacheProvider,
@@ -42,6 +43,7 @@ import type { Logger } from '@sentra/observability';
 import type { AuditReadModel, Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
+import { createOrgSignup, type OrgSignup } from './auth/org-signup';
 import { createPartnerAdmin, type PartnerAdmin } from './partner/admin';
 import { createPartnerAuthenticator, type PartnerAuthenticator } from './partner/authenticator';
 import { createPartnerIdempotency, type PartnerIdempotency } from './partner/idempotency';
@@ -77,6 +79,7 @@ export interface PartnerRuntime {
 export interface UserAuthRuntime {
   readonly resolve: ResolveUserPrincipalUseCase;
   readonly memberAdmin: MemberAdmin;
+  readonly orgSignup: OrgSignup;
 }
 
 export interface Container {
@@ -190,6 +193,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     const users = createPrismaUserRepository(prisma, unitOfWork);
     const identities = createPrismaIdentityLinkRepository(prisma, unitOfWork);
     const memberships = createPrismaMembershipRepository(prisma, unitOfWork);
+    const organizations = createPrismaOrganizationRepository(prisma, unitOfWork);
     auth = {
       resolve: createResolveUserPrincipalUseCase({
         clock,
@@ -201,6 +205,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
         memberships,
       }),
       memberAdmin: createMemberAdmin({ memberships, users, unitOfWork, audit, ids, clock }),
+      orgSignup: createOrgSignup({ organizations, memberships, unitOfWork, audit, ids, clock }),
     };
   }
 

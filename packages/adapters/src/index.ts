@@ -84,4 +84,8 @@ export {
   PrismaMembershipRepository,
   createPrismaMembershipRepository,
 } from './prisma/prisma-membership-repository';
+export {
+  PrismaOrganizationRepository,
+  createPrismaOrganizationRepository,
+} from './prisma/prisma-organization-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';

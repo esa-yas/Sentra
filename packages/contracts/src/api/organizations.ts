@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   currencySchema,
   jurisdictionSchema,
+  organizationApprovalStatusSchema,
   organizationSlugSchema,
   organizationStatusSchema,
   organizationTypeSchema,
@@ -37,6 +38,34 @@ export const organizationResponseSchema = z.object({
 });
 
 export type OrganizationResponse = z.infer<typeof organizationResponseSchema>;
+
+/**
+ * Self-service signup. An authenticated (but org-less) user creates their own tenant, which
+ * lands in SANDBOX — production access is a separate, reviewed step. The applicant becomes the
+ * OWNER. A human-readable name is supplied; the URL-safe slug is derived server-side.
+ */
+export const organizationSignupRequestSchema = z
+  .object({
+    organizationName: z.string().trim().min(2).max(80),
+    /** Signups are for banks and telecoms; the PLATFORM tenant is never self-created. */
+    organizationType: z.enum(['BANK', 'TELECOM']),
+    jurisdiction: jurisdictionSchema.default('GB'),
+  })
+  .strict();
+
+export type OrganizationSignupRequest = z.infer<typeof organizationSignupRequestSchema>;
+
+export const organizationSignupResponseSchema = z.object({
+  id: ulidSchema,
+  slug: organizationSlugSchema,
+  legalName: z.string(),
+  type: organizationTypeSchema,
+  approvalStatus: organizationApprovalStatusSchema,
+  role: memberRoleSchema,
+  createdAt: z.string().datetime(),
+});
+
+export type OrganizationSignupResponse = z.infer<typeof organizationSignupResponseSchema>;
 
 export const updateOrganizationRequestSchema = z
   .object({

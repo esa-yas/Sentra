@@ -35,6 +35,31 @@ export const organizationStatusSchema = z.enum([
 ]);
 
 /**
+ * Go-live lifecycle, distinct from operational {@link ORGANIZATION_STATUSES}. A newly signed-up
+ * tenant starts in SANDBOX (test credentials only). It may request production access, which a
+ * PLATFORM administrator moves to APPROVED — or to NEEDS_CONTACT when the team wants to speak to
+ * the applicant first (that state surfaces a phone number / booking link to the tenant).
+ */
+export const ORGANIZATION_APPROVAL_STATUSES = {
+  SANDBOX: 'SANDBOX',
+  PENDING_REVIEW: 'PENDING_REVIEW',
+  NEEDS_CONTACT: 'NEEDS_CONTACT',
+  APPROVED: 'APPROVED',
+  DECLINED: 'DECLINED',
+} as const;
+
+export type OrganizationApprovalStatus =
+  (typeof ORGANIZATION_APPROVAL_STATUSES)[keyof typeof ORGANIZATION_APPROVAL_STATUSES];
+
+export const organizationApprovalStatusSchema = z.enum([
+  ORGANIZATION_APPROVAL_STATUSES.SANDBOX,
+  ORGANIZATION_APPROVAL_STATUSES.PENDING_REVIEW,
+  ORGANIZATION_APPROVAL_STATUSES.NEEDS_CONTACT,
+  ORGANIZATION_APPROVAL_STATUSES.APPROVED,
+  ORGANIZATION_APPROVAL_STATUSES.DECLINED,
+]);
+
+/**
  * A URL- and log-safe tenant handle. Constrained so it can appear in an audit chain key
  * and a queue name without escaping.
  */

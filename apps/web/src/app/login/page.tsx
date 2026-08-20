@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
@@ -113,6 +114,13 @@ function LoginForm() {
       >
         {mode === 'password' ? 'Use a magic link instead' : 'Use a password instead'}
       </button>
+
+      <p className="border-t border-slate-800 pt-4 text-center text-xs text-slate-400">
+        New organization?{' '}
+        <Link href="/signup" className="font-medium text-sky-400 hover:text-sky-300">
+          Create an account
+        </Link>
+      </p>
     </form>
   );
 }

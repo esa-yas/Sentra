@@ -19,7 +19,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   const { response, userId } = await updateSession(request);
   const path = request.nextUrl.pathname;
-  const isPublic = path === '/login' || path.startsWith('/auth/');
+  const isPublic = path === '/login' || path === '/signup' || path.startsWith('/auth/');
 
   if (userId === null && !isPublic) {
     const url = request.nextUrl.clone();
