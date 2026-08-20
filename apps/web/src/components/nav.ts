@@ -17,9 +17,7 @@ export interface NavItem {
 /** The MVP navigation, in the order the brief specifies. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Overview', href: '/', status: 'live', permission: 'organization:read' },
-  { label: 'Live Events', href: '/events', status: 'live', permission: 'organization:read' },
   { label: 'Scam Cases', href: '/cases', status: 'live', permission: 'recommendation:read' },
-  { label: 'System Flow', href: '/system-flow', status: 'live', permission: 'organization:read' },
   { label: 'API Activity', href: '/api-activity', status: 'live', permission: 'partner:read' },
   { label: 'Partners', href: '/partners', status: 'live', permission: 'partner:read' },
   { label: 'Members', href: '/members', status: 'live', permission: 'member:read' },
