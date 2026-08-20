@@ -52,11 +52,10 @@ const FALLBACK_EMAIL_DOMAIN = 'users.noreply.sentra';
 export const createResolveUserPrincipalUseCase = (deps: ResolveUserPrincipalDeps) => {
   const { clock, ids, unitOfWork, verifier, users, identities, memberships } = deps;
 
-  const execute = async (rawToken: string): Promise<ResolvedUserSession> => {
-    // Throws InvalidTokenError before any database work if the token is not trustworthy.
-    const verified = await verifier.verify(rawToken);
+  type Verified = Awaited<ReturnType<typeof verifier.verify>>;
 
-    return unitOfWork.run(async (scope) => {
+  const runResolution = (verified: Verified): Promise<ResolvedUserSession> =>
+    unitOfWork.run(async (scope) => {
       const now = clock.now();
       const existingLink = await identities.findByIssuerAndSubject(
         verified.issuer,
@@ -134,12 +133,39 @@ export const createResolveUserPrincipalUseCase = (deps: ResolveUserPrincipalDeps
         provisioned,
       };
     });
+
+  const execute = async (rawToken: string): Promise<ResolvedUserSession> => {
+    // Throws InvalidTokenError before any database work if the token is not trustworthy.
+    const verified = await verifier.verify(rawToken);
+    try {
+      return await runResolution(verified);
+    } catch (error) {
+      // A brand-new user's first page load fires several requests at once, each racing to
+      // provision the same person. One wins; the others hit a unique(primaryEmail)/identity
+      // conflict. Retrying once resolves cleanly — the now-existing records are found, not
+      // re-created. Any other failure propagates unchanged.
+      if (isUniqueConstraintConflict(error)) {
+        return runResolution(verified);
+      }
+      throw error;
+    }
   };
 
   return { execute };
 };
 
 export type ResolveUserPrincipalUseCase = ReturnType<typeof createResolveUserPrincipalUseCase>;
+
+/**
+ * True for a unique-constraint violation, without importing the persistence adapter into the
+ * core. Prisma surfaces these as an error whose `code` is `P2002`; an in-memory unit of work
+ * can throw the same shape. Anything else is a genuine error and must not be retried.
+ */
+const isUniqueConstraintConflict = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: unknown }).code === 'P2002';
 
 const displayNameFor = (email: string): string => {
   const local = email.split('@')[0];
