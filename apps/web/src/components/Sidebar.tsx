@@ -46,7 +46,6 @@ function navIcon(href: string): ReactNode {
         <path d="M6 12v0M6 16v0M15 8v0M15 12v0M15 16v0" />
       </>
     ),
-    '/queues': p('M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5'),
     '/members': (
       <>
         <circle cx="9" cy="8" r="3" />

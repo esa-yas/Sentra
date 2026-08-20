@@ -22,7 +22,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'System Flow', href: '/system-flow', status: 'live', permission: 'organization:read' },
   { label: 'API Activity', href: '/api-activity', status: 'live', permission: 'partner:read' },
   { label: 'Partners', href: '/partners', status: 'live', permission: 'partner:read' },
-  { label: 'Queues', href: '/queues', status: 'live', permission: 'organization:read' },
   { label: 'Members', href: '/members', status: 'live', permission: 'member:read' },
   { label: 'Audit Chain', href: '/audit-chain', status: 'live', permission: 'audit:read' },
 ];

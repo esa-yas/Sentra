@@ -23,26 +23,55 @@
   --color-slate-100: var(--t-ink);
   --color-slate-50: var(--t-ink);
 
-  /* accent (sky) */
+  /*
+   * The full useful ramp (100–700) of every semantic family maps onto its token, so any
+   * shade a screen reaches for renders as a readable, theme-aware color. (Mapping only
+   * 300–500 left pale defaults like amber-200 / sky-200 nearly invisible on light tints.)
+   * Backgrounds keep their alpha — `bg-amber-500/10` becomes the token at 10%.
+   */
+
+  /* accent (sky + violet route to the brand accent) */
+  --color-sky-100: var(--t-accent-2);
+  --color-sky-200: var(--t-accent-2);
   --color-sky-300: var(--t-accent-2);
   --color-sky-400: var(--t-accent);
   --color-sky-500: var(--t-accent);
   --color-sky-600: var(--t-accent-strong);
+  --color-sky-700: var(--t-accent-strong);
+  --color-violet-200: var(--t-synthetic);
+  --color-violet-300: var(--t-synthetic);
+  --color-violet-400: var(--t-synthetic);
+  --color-violet-500: var(--t-synthetic);
 
-  /* risk semantics: green = safe, amber = caution, red = danger */
+  /* risk semantics: green = safe, amber = caution, orange = high, red = danger */
+  --color-emerald-100: var(--t-low);
+  --color-emerald-200: var(--t-low);
   --color-emerald-300: var(--t-low);
   --color-emerald-400: var(--t-low);
   --color-emerald-500: var(--t-low);
+  --color-emerald-600: var(--t-low);
+  --color-amber-100: var(--t-med);
+  --color-amber-200: var(--t-med);
   --color-amber-300: var(--t-med);
   --color-amber-400: var(--t-med);
   --color-amber-500: var(--t-med);
+  --color-amber-600: var(--t-med);
+  --color-orange-300: var(--t-high);
+  --color-orange-400: var(--t-high);
+  --color-orange-500: var(--t-high);
+  --color-orange-600: var(--t-high);
+  --color-red-100: var(--t-crit);
   --color-red-200: var(--t-crit);
   --color-red-300: var(--t-crit);
   --color-red-400: var(--t-crit);
   --color-red-500: var(--t-crit);
+  --color-red-600: var(--t-crit);
+  --color-rose-200: var(--t-crit);
   --color-rose-300: var(--t-crit);
   --color-rose-400: var(--t-crit);
+  --color-fuchsia-200: var(--t-synthetic);
   --color-fuchsia-300: var(--t-synthetic);
+  --color-fuchsia-400: var(--t-synthetic);
   --color-fuchsia-500: var(--t-synthetic);
 }
 
