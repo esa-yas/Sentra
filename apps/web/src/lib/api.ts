@@ -3,18 +3,13 @@ import type {
   DevelopmentStatus,
   EventList,
   FlowRun,
-  HealthResponse,
   OperationsSummary,
   OutboxEventView,
   OutboxList,
-  ProviderHealth,
   QueueActionResult,
   QueueJobList,
   QueueMonitorSummary,
-  ReadinessResponse,
   RecommendationView,
-  SimulatorEvaluateRequest,
-  SimulatorScenarioList,
   PartnerApiActivityList,
   PartnerConnectionList,
   SandboxSignedRequestResult,
@@ -124,12 +119,6 @@ export const getSummary = (): Promise<ApiResult<OperationsSummary>> =>
 export const getDevelopmentStatus = (): Promise<ApiResult<DevelopmentStatus>> =>
   apiFetch('/api/operations/development-status');
 
-export const getIntegrations = (): Promise<ApiResult<{ items: ProviderHealth[] }>> =>
-  apiFetch('/api/operations/integrations');
-
-export const getScenarios = (): Promise<ApiResult<SimulatorScenarioList>> =>
-  apiFetch('/api/simulator/scenarios');
-
 export const getLatestFlow = (): Promise<ApiResult<FlowRun>> =>
   apiFetch('/api/operations/flow/latest');
 
@@ -145,18 +134,6 @@ export interface CaseDetail {
 
 export const getCase = (id: string): Promise<ApiResult<CaseDetail>> =>
   apiFetch(`/api/cases/${encodeURIComponent(id)}`);
-
-export const getHealth = (): Promise<ApiResult<HealthResponse>> => apiFetch('/health');
-
-export const getReadiness = (): Promise<ApiResult<ReadinessResponse>> => apiFetch('/ready');
-
-export interface EvaluateResponse {
-  recommendation: RecommendationView;
-  flow: FlowRun;
-}
-
-export const evaluate = (input: SimulatorEvaluateRequest): Promise<ApiResult<EvaluateResponse>> =>
-  apiFetch('/api/simulator/evaluate', { method: 'POST', body: JSON.stringify(input) });
 
 const buildQuery = (query: Record<string, string | number | undefined>): string => {
   const params = new URLSearchParams();

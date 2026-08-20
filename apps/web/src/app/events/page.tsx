@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OperationalEvent } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge, EmptyState, ErrorNotice, Panel, Skeleton, SyntheticTag } from '@/components/ui';
+import { Badge, EmptyState, ErrorNotice, Panel, Skeleton } from '@/components/ui';
 import { getEvents, type ApiError } from '@/lib/api';
 import { severityClass, statusClass } from '@/lib/theme';
 import { formatTime, humanizeCode } from '@/lib/format';
@@ -96,7 +96,7 @@ export default function EventsPage() {
             ))}
           </div>
         ) : events.length === 0 ? (
-          <EmptyState title="No events" description="Run a scenario in the Risk Simulator to generate synthetic events." />
+          <EmptyState title="No events" description="Domain events stream in here as the pipeline processes activity." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -158,7 +158,6 @@ function ExpandableRow({
           <td colSpan={9} className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
               <span>subject: <span className="font-mono text-slate-300">{event.subjectRef ?? '—'}</span></span>
-              {event.synthetic && <SyntheticTag />}
               <span className="text-slate-500">Redacted payload preview:</span>
             </div>
             <pre className="mt-2 overflow-x-auto rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">

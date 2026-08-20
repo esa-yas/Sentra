@@ -12,7 +12,6 @@ import { createAuditRouter } from './routes/audit';
 import { createHealthRouter } from './routes/health';
 import { createMembersRouter } from './routes/members';
 import { createOperationsRouter } from './routes/operations';
-import { createSimulatorRouter } from './routes/simulator';
 import { createPartnerAdminRouter } from './routes/v1-admin';
 import { createPartnerIngestRouter } from './routes/v1-ingest';
 
@@ -48,7 +47,6 @@ export const createApp = (container: Container): Express => {
   app.use(requestMetricsMiddleware(clock, (durationMs, failed) => store.recordApiRequest(durationMs, failed)));
 
   app.use('/', createHealthRouter(container));
-  app.use('/api/simulator', createSimulatorRouter(container));
   app.use('/api', createAuthRouter(container));
   app.use('/api', createMembersRouter(container));
   app.use('/api', createAuditRouter(container));

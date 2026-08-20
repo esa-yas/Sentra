@@ -1,9 +1,9 @@
 import type { RecommendationView } from '@sentra/contracts';
-import { Badge, Panel, SyntheticTag } from './ui';
+import { Badge, Panel } from './ui';
 import { actionClass, actionLabel, providerStateClass, riskLevelClass } from '@/lib/theme';
 import { formatDateTime, formatMs, humanizeCode } from '@/lib/format';
 
-/** Renders one explainable recommendation. Shared by the simulator and the case detail. */
+/** Renders one explainable recommendation, shown on the case detail screen. */
 export function RecommendationDetail({ recommendation }: { recommendation: RecommendationView }) {
   const r = recommendation;
   return (
@@ -21,7 +21,6 @@ export function RecommendationDetail({ recommendation }: { recommendation: Recom
                 <Badge className={actionClass[r.recommendedAction]}>
                   {actionLabel[r.recommendedAction] ?? r.recommendedAction}
                 </Badge>
-                {r.synthetic && <SyntheticTag />}
               </div>
               <p className="mt-2 max-w-xl text-sm text-slate-200">{r.summary}</p>
               <p className="mt-1 text-xs text-amber-300/90">{r.authorityNote}</p>

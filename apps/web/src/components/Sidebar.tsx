@@ -2,15 +2,68 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { useSession } from '@/lib/session';
 import { NAV_ITEMS } from './nav';
+
+/** Line icons keyed by route, drawn inline to keep the browser bundle free of an icon library. */
+function navIcon(href: string): ReactNode {
+  const p = (d: string) => <path d={d} />;
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  const paths: Record<string, ReactNode> = {
+    '/': (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    '/events': p('M13 2L3 14h7l-1 8 10-12h-7l1-8z'),
+    '/cases': p('M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z'),
+    '/system-flow': (
+      <>
+        <circle cx="5" cy="6" r="2.2" />
+        <circle cx="19" cy="6" r="2.2" />
+        <circle cx="12" cy="18" r="2.2" />
+        <path d="M7 6h10M5 8v3a3 3 0 0 0 3 3h1M19 8v3a3 3 0 0 1-3 3h-1" />
+      </>
+    ),
+    '/api-activity': p('M8 6l-5 6 5 6M16 6l5 6-5 6'),
+    '/partners': (
+      <>
+        <rect x="3" y="8" width="8" height="13" rx="1.3" />
+        <path d="M11 21h10V4a1 1 0 0 0-1-1h-8a1 1 0 0 0-1 1v4" />
+        <path d="M6 12v0M6 16v0M15 8v0M15 12v0M15 16v0" />
+      </>
+    ),
+    '/queues': p('M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5'),
+    '/members': (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3 20a6 6 0 0 1 12 0" />
+        <path d="M16 5.5a3 3 0 0 1 0 5.5M21 20a6 6 0 0 0-4-5.6" />
+      </>
+    ),
+    '/audit-chain': p('M9 12a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3 3 3 0 0 0-3-3M15 12a3 3 0 0 0-3-3h-1a3 3 0 0 0-3 3'),
+  };
+  return <svg {...common}>{paths[href] ?? <rect x="4" y="4" width="16" height="16" rx="3" />}</svg>;
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { hasPermission, loading, activeMembership } = useSession();
   // Role-aware hiding only applies once an active membership is resolved. While loading, or if
-  // no membership resolves, show the full nav — the API remains the real authorization boundary,
-  // so a UX glitch can never leave an operator staring at an empty sidebar.
+  // no membership resolves, show the full nav — the API remains the real authorization boundary.
   const items = NAV_ITEMS.filter(
     (item) =>
       loading ||
@@ -19,32 +72,38 @@ export function Sidebar() {
       hasPermission(item.permission),
   );
 
+  const slug = activeMembership?.organizationSlug ?? 'operations';
+  const orgName = slug
+    .split(/[-_]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+  const orgRole = activeMembership?.role ?? 'Operations Console';
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
-      <div className="flex items-center gap-2.5 border-b border-slate-800 px-5 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20 text-sm font-bold text-sky-300">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
+      <div className="flex items-center gap-2.5 px-5 py-[18px]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500 text-sm font-bold text-white">
           S
         </div>
-        <div>
-          <p className="text-sm font-semibold text-slate-100">Sentra</p>
-          <p className="text-[11px] text-slate-500">Operations Console</p>
-        </div>
+        <p className="text-[17px] font-bold tracking-tight text-slate-100">Sentra</p>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
         {items.map((item) => {
           const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+              aria-current={active ? 'page' : undefined}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
                 active
-                  ? 'bg-slate-800 text-slate-100'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                  ? 'bg-[var(--t-card-2)] font-semibold text-slate-100'
+                  : 'font-medium text-slate-400 hover:bg-[var(--t-card-2)] hover:text-slate-200'
               }`}
             >
-              <span>{item.label}</span>
+              <span className={active ? 'text-sky-400' : 'text-slate-400'}>{navIcon(item.href)}</span>
+              <span className="flex-1">{item.label}</span>
               {item.status === 'planned' && (
                 <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
                   soon
@@ -55,8 +114,20 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-slate-800 px-5 py-3 text-[11px] text-slate-600">
-        Version 1a · Operations
+      <div className="space-y-3 px-3 pb-3 pt-2">
+        <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-[var(--t-card-2)] px-3 py-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500 text-xs font-bold text-white">
+            {orgName.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-100">{orgName}</p>
+            <p className="truncate text-[11px] capitalize text-slate-500">{orgRole}</p>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+            <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+          </svg>
+        </div>
+        <p className="px-2 text-center text-[11px] text-slate-500">© 2026 Sentra · Version 1a</p>
       </div>
     </aside>
   );
