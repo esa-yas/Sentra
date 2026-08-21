@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
-import { getCurrentUser, signUpOrganization } from '@/lib/api';
+import type { PendingInvitation } from '@sentra/contracts';
+import { acceptInvitation, getCurrentUser, getMyInvitations, signUpOrganization } from '@/lib/api';
 import {
   AuthBrandMark,
   AuthBrandPanel,
@@ -24,6 +25,7 @@ import {
   StepProgress,
   SubmitButton,
 } from '@/components/auth-ui';
+import { Button } from '@/components/ui';
 
 type OrgType = 'BANK' | 'TELECOM';
 
@@ -80,6 +82,10 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [step, setStep] = useState(1);
+  // Invitations addressed to this user. While any exist they are an invited teammate, not a
+  // founder, and must never be asked to create an organization.
+  const [invites, setInvites] = useState<PendingInvitation[]>([]);
+  const [joining, setJoining] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
@@ -119,6 +125,17 @@ export default function OnboardingPage() {
         router.replace('/');
         return;
       }
+
+      // Before offering to create an organization, check whether one is already waiting for them.
+      const mine = await getMyInvitations();
+      if (!active) return;
+      if (mine.data !== undefined && mine.data.items.length > 0) {
+        setInvites([...mine.data.items]);
+        const storedTitle = metadata?.[PROFILE_METADATA.jobTitle];
+        if (typeof storedTitle === 'string') {
+          setJobTitle(storedTitle);
+        }
+      }
       setReady(true);
     })();
     return () => {
@@ -157,6 +174,25 @@ export default function OnboardingPage() {
     }
   };
 
+  const join = async (invitation: PendingInvitation) => {
+    setJoining(invitation.id);
+    setError(null);
+    try {
+      const result = await acceptInvitation({
+        invitationId: invitation.id,
+        fullName: fullName.trim().length >= 2 ? fullName.trim() : 'Member',
+      });
+      if (result.error !== undefined) {
+        setError(result.error.message);
+        return;
+      }
+      router.replace('/');
+      router.refresh();
+    } finally {
+      setJoining(null);
+    }
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -178,6 +214,74 @@ export default function OnboardingPage() {
           <span aria-hidden className="block h-1 w-full overflow-hidden rounded-full bg-[var(--t-card-2)]">
             <span className="block h-full w-1/3 animate-pulse rounded-full bg-[var(--t-accent)]" />
           </span>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  // An invited teammate joins the organization that invited them. They are never shown the
+  // create-an-organization wizard, which would make them the owner of a second tenant.
+  if (invites.length > 0) {
+    return (
+      <AuthLayout
+        panel={
+          <AuthBrandPanel
+            headline={
+              invites.length === 1
+                ? `Join ${invites[0]!.organizationName} on Sentra.`
+                : 'You’ve been invited.'
+            }
+            quote="Your teammates already run scam decisions here. You’ll pick up where they left off — same tenant, same audit trail."
+          />
+        }
+      >
+        <div className="space-y-5">
+          <AuthBrandMark />
+          <AuthHeading
+            title={invites.length === 1 ? 'You’ve been invited' : 'Choose an organization'}
+            subtitle={
+              invites.length === 1
+                ? 'Accept to join your team. You don’t need to create anything — the organization already exists.'
+                : 'You have more than one invitation waiting. Pick the organization you want to join.'
+            }
+          />
+
+          <div className="space-y-3">
+            {invites.map((invitation) => (
+              <div
+                key={invitation.id}
+                className="rounded-xl border border-slate-700 bg-[var(--t-card-2)] p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--t-accent)] text-sm font-bold text-white">
+                    {invitation.organizationName.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-100">
+                      {invitation.organizationName}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Joining as {invitation.role.toLowerCase()}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  tone="primary"
+                  className="mt-4 w-full"
+                  disabled={joining !== null}
+                  onClick={() => void join(invitation)}
+                >
+                  {joining === invitation.id ? 'Joining…' : `Join ${invitation.organizationName}`}
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {error !== null && <FormError>{error}</FormError>}
+
+          <p className="text-center text-xs text-slate-500">
+            Wrong account? Sign out and sign back in with the address your invitation was sent to.
+          </p>
         </div>
       </AuthLayout>
     );

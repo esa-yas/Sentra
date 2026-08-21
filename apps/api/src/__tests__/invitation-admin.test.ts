@@ -77,6 +77,9 @@ function invitationRepo(seed?: Partial<InvitationRecord>) {
       } as unknown as InvitationRecord;
     },
     findByTokenLookup: async () => record,
+    findById: async () => record,
+    listPendingForEmail: async () =>
+      record === null || record.status !== 'PENDING' ? [] : [record],
     listForOrganization: async () => (record === null ? [] : [record]),
     updateStatus: async (id: string, status: string) => {
       statuses.push({ id, status });
@@ -156,7 +159,7 @@ describe('invitation admin', () => {
     const members = membershipRepo();
     const admin = build(repo, members.repo);
 
-    const result = await admin.accept('any-token', caller, 'Ada Lovelace');
+    const result = await admin.accept({ token: 'any-token' }, caller, 'Ada Lovelace');
 
     expect(result.organizationName).toBe('Northwind Bank');
     expect(members.created[0]?.role).toBe('ANALYST');
@@ -172,23 +175,23 @@ describe('invitation admin', () => {
     const admin = build(repo, members.repo);
 
     await expect(
-      admin.accept('any-token', { ...caller, email: 'someone.else@evil.test' }, 'Mallory'),
+      admin.accept({ token: 'any-token' }, { ...caller, email: 'someone.else@evil.test' }, 'Mallory'),
     ).rejects.toThrow(/different email address/i);
     expect(members.created).toHaveLength(0);
   });
 
   it('refuses an already accepted, revoked, or expired invitation', async () => {
     const accepted = build(invitationRepo({ status: 'ACCEPTED' }).repo, membershipRepo().repo);
-    await expect(accepted.accept('t', caller, 'Ada')).rejects.toThrow(/already been accepted/i);
+    await expect(accepted.accept({ token: 't' }, caller, 'Ada')).rejects.toThrow(/already been accepted/i);
 
     const revoked = build(invitationRepo({ status: 'REVOKED' }).repo, membershipRepo().repo);
-    await expect(revoked.accept('t', caller, 'Ada')).rejects.toThrow(/revoked/i);
+    await expect(revoked.accept({ token: 't' }, caller, 'Ada')).rejects.toThrow(/revoked/i);
 
     const expired = build(
       invitationRepo({ expiresAt: new Date(NOW.getTime() - 1) }).repo,
       membershipRepo().repo,
     );
-    await expect(expired.accept('t', caller, 'Ada')).rejects.toThrow(/expired/i);
+    await expect(expired.accept({ token: 't' }, caller, 'Ada')).rejects.toThrow(/expired/i);
   });
 
   it('previews an invitation without leaking the token or who sent it', async () => {
@@ -202,5 +205,42 @@ describe('invitation admin', () => {
       expiresAt: new Date(NOW.getTime() + 60_000).toISOString(),
     });
     expect(Object.keys(preview)).not.toContain('invitedBy');
+  });
+
+  // The reported bug: an invited employee who signs in before accepting had no membership, so the
+  // console offered them the founder wizard — asking them to create a bank they do not own.
+  it('lists a pending invitation for the signed-in address so they are not treated as a founder', async () => {
+    const admin = build(invitationRepo({}).repo, membershipRepo().repo);
+    const mine = await admin.listMine('  Invitee@Bank.test ');
+    expect(mine.items).toHaveLength(1);
+    expect(mine.items[0]).toMatchObject({
+      id: 'inv_1',
+      role: 'ANALYST',
+      organizationName: 'Northwind Bank',
+    });
+  });
+
+  it('does not list expired invitations', async () => {
+    const admin = build(
+      invitationRepo({ expiresAt: new Date(NOW.getTime() - 1) }).repo,
+      membershipRepo().repo,
+    );
+    expect((await admin.listMine('invitee@bank.test')).items).toHaveLength(0);
+  });
+
+  it('accepts by invitation id, still refusing a mismatched address', async () => {
+    const members = membershipRepo();
+    const admin = build(invitationRepo({}).repo, members.repo);
+
+    const result = await admin.accept({ invitationId: 'inv_1' }, caller, 'Ada Lovelace');
+    expect(result.organizationName).toBe('Northwind Bank');
+    expect(members.created[0]?.role).toBe('ANALYST');
+
+    const other = membershipRepo();
+    const admin2 = build(invitationRepo({}).repo, other.repo);
+    await expect(
+      admin2.accept({ invitationId: 'inv_1' }, { ...caller, email: 'mallory@evil.test' }, 'M'),
+    ).rejects.toThrow(/different email address/i);
+    expect(other.created).toHaveLength(0);
   });
 });

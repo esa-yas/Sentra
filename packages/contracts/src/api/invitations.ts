@@ -76,13 +76,22 @@ export const invitationPreviewSchema = z.object({
 
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
 
+/**
+ * Accepted either by the token from the emailed link, or — for someone already signed in as the
+ * invited address — by the invitation's id. Both paths verify the caller's authenticated email
+ * against the invitation, so the id alone grants nothing.
+ */
 export const acceptInvitationRequestSchema = z
   .object({
-    token: z.string().min(16).max(256),
+    token: z.string().min(16).max(256).optional(),
+    invitationId: ulidSchema.optional(),
     /** Recorded as the member's display name. The email and organization are not negotiable. */
     fullName: z.string().trim().min(2).max(80),
   })
-  .strict();
+  .strict()
+  .refine((value) => (value.token === undefined) !== (value.invitationId === undefined), {
+    message: 'Provide either an invitation token or an invitation id.',
+  });
 
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>;
 
@@ -93,3 +102,20 @@ export const acceptInvitationResponseSchema = z.object({
 });
 
 export type AcceptInvitationResponse = z.infer<typeof acceptInvitationResponseSchema>;
+
+/** A pending invitation addressed to the signed-in user, listed so they can join in one click. */
+export const pendingInvitationSchema = z.object({
+  id: ulidSchema,
+  role: memberRoleSchema,
+  organizationName: z.string(),
+  organizationType: organizationTypeSchema,
+  expiresAt: z.string().datetime(),
+});
+
+export type PendingInvitation = z.infer<typeof pendingInvitationSchema>;
+
+export const myInvitationsResponseSchema = z.object({
+  items: z.array(pendingInvitationSchema),
+});
+
+export type MyInvitationsResponse = z.infer<typeof myInvitationsResponseSchema>;

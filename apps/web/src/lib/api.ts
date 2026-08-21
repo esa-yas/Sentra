@@ -12,6 +12,7 @@ import type {
   InvitationListResponse,
   InvitationPreview,
   InvitationView,
+  MyInvitationsResponse,
   ApiKeyView,
   CreateApiKeyRequest,
   GoLiveRequestResponse,
@@ -289,6 +290,10 @@ export const revokeInvitation = (invitationId: string): Promise<ApiResult<Invita
     method: 'POST',
     body: '{}',
   });
+
+/** Pending invitations addressed to the signed-in user. */
+export const getMyInvitations = (): Promise<ApiResult<MyInvitationsResponse>> =>
+  apiFetch('/api/invitations/mine');
 
 /** Public: what the invitee is shown before signing in. */
 export const previewInvitation = (token: string): Promise<ApiResult<InvitationPreview>> =>

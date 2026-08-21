@@ -11,6 +11,7 @@ import {
   type InvitationPreview,
   type InvitationView,
   type MemberRole,
+  type MyInvitationsResponse,
 } from '@sentra/contracts';
 import { renderInvitationEmail } from '@sentra/adapters';
 import { getCorrelationId, type Logger } from '@sentra/observability';
@@ -156,6 +157,32 @@ export class InvitationAdmin {
     return { invitation: toView(record), emailSent, acceptUrl };
   }
 
+  /**
+   * Pending invitations addressed to a signed-in user. This is what stops an invited employee
+   * being shown the "create your organization" wizard: they have no membership yet, but they are
+   * not a founder either — they simply have an invitation waiting.
+   */
+  public async listMine(email: string): Promise<MyInvitationsResponse> {
+    const records = await this.deps.invitations.listPendingForEmail(normaliseEmail(email));
+    const now = this.deps.clock.now().getTime();
+    const usable = records.filter((record) => record.expiresAt.getTime() > now);
+    const items = await Promise.all(
+      usable.map(async (record) => {
+        const organization = await this.deps.organizations.findById(record.organizationId);
+        return organization === null
+          ? null
+          : {
+              id: record.id,
+              role: record.role,
+              organizationName: organization.legalName,
+              organizationType: organization.type,
+              expiresAt: record.expiresAt.toISOString(),
+            };
+      }),
+    );
+    return { items: items.filter((item): item is NonNullable<typeof item> => item !== null) };
+  }
+
   /** What the invitee is shown before they accept. Never reveals the token or the inviter. */
   public async preview(token: string): Promise<InvitationPreview> {
     const record = await this.requirePending(token);
@@ -177,11 +204,14 @@ export class InvitationAdmin {
    * the invited address, so forwarding the link to someone else does not grant them access.
    */
   public async accept(
-    token: string,
+    lookup: { token?: string; invitationId?: string },
     caller: { userId: string; email: string; label: string },
     fullName: string,
   ): Promise<AcceptInvitationResponse> {
-    const record = await this.requirePending(token);
+    const record =
+      lookup.token !== undefined
+        ? await this.requirePending(lookup.token)
+        : await this.requirePendingById(lookup.invitationId ?? '');
     if (normaliseEmail(caller.email) !== record.email) {
       throw new ValidationError(
         'This invitation was issued to a different email address. Sign in with the invited address to accept it.',
@@ -270,6 +300,22 @@ export class InvitationAdmin {
     if (record === null) {
       throw new NotFoundError('invitation', 'token');
     }
+    return this.assertUsable(record);
+  }
+
+  /**
+   * Same checks, for an invitation identified by id. Safe because {@link accept} still requires
+   * the caller's authenticated email to match the invited address.
+   */
+  private async requirePendingById(invitationId: string): Promise<InvitationRecord> {
+    const record = await this.deps.invitations.findById(invitationId);
+    if (record === null) {
+      throw new NotFoundError('invitation', invitationId);
+    }
+    return this.assertUsable(record);
+  }
+
+  private assertUsable(record: InvitationRecord): InvitationRecord {
     if (record.status === INVITATION_STATUSES.ACCEPTED) {
       throw new ValidationError('This invitation has already been accepted.');
     }

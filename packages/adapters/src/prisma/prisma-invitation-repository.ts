@@ -72,6 +72,22 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return rows.map(toRecord);
   }
 
+  public async listPendingForEmail(
+    email: string,
+    scope?: TransactionScope,
+  ): Promise<readonly InvitationRecord[]> {
+    const rows = await this.exec(scope).organizationInvitation.findMany({
+      where: { email: email.trim().toLowerCase(), status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toRecord);
+  }
+
+  public async findById(id: string, scope?: TransactionScope): Promise<InvitationRecord | null> {
+    const row = await this.exec(scope).organizationInvitation.findUnique({ where: { id } });
+    return row === null ? null : toRecord(row);
+  }
+
   public async updateStatus(
     id: string,
     status: InvitationStatus,

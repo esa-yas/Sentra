@@ -76,6 +76,16 @@ export const createInvitationsRouter = (container: Container): Router => {
     res.json(await auth.invitationAdmin.preview(token));
   });
 
+  // Pending invitations for whoever is signed in. Used to recognise an invited employee who has
+  // no membership yet, so they are never shown the create-your-organization flow.
+  router.get('/invitations/mine', async (req, res) => {
+    if (auth === undefined) {
+      throw new InvalidTokenError();
+    }
+    const session = await auth.resolve.execute(bearerTokenFrom(req));
+    res.json(await auth.invitationAdmin.listMine(session.profile.email));
+  });
+
   router.post('/invitations/accept', async (req, res) => {
     if (auth === undefined) {
       throw new InvalidTokenError();
@@ -84,7 +94,10 @@ export const createInvitationsRouter = (container: Container): Router => {
     const input = parseOrThrow(acceptInvitationRequestSchema, req.body ?? {});
     res.json(
       await auth.invitationAdmin.accept(
-        input.token,
+        {
+          ...(input.token === undefined ? {} : { token: input.token }),
+          ...(input.invitationId === undefined ? {} : { invitationId: input.invitationId }),
+        },
         {
           userId: session.profile.userId,
           email: session.profile.email,

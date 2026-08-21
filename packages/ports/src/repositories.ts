@@ -149,6 +149,12 @@ export interface InvitationRepository {
     organizationId: string,
     scope?: TransactionScope,
   ): Promise<readonly InvitationRecord[]>;
+  /** Pending invitations issued to one address, so a signed-in invitee can be recognised. */
+  listPendingForEmail(
+    email: string,
+    scope?: TransactionScope,
+  ): Promise<readonly InvitationRecord[]>;
+  findById(id: string, scope?: TransactionScope): Promise<InvitationRecord | null>;
   updateStatus(
     id: string,
     status: InvitationStatus,
