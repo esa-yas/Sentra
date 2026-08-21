@@ -20,6 +20,7 @@ import {
   createPrismaPartnerDomainStore,
   createPrismaPartnerSigningKeyRepository,
   createPrismaApiKeyRepository,
+  createPrismaInvitationRepository,
   createPrismaIdentityLinkRepository,
   createPrismaMembershipRepository,
   createPrismaOrganizationRepository,
@@ -44,6 +45,11 @@ import type { Logger } from '@sentra/observability';
 import type { AuditReadModel, Clock, IdGenerator, OperationsReadModel } from '@sentra/ports';
 import { createQueueAdmin, type QueueAdmin } from './queue-admin';
 import { createApiKeyAdmin, type ApiKeyAdmin } from './auth/api-key-admin';
+import {
+  createInvitationAdmin,
+  createSupabaseInvitationMailer,
+  type InvitationAdmin,
+} from './auth/invitation-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
 import { createOrgAdmin, type OrgAdmin } from './auth/org-admin';
 import { createOrgSignup, type OrgSignup } from './auth/org-signup';
@@ -85,6 +91,7 @@ export interface UserAuthRuntime {
   readonly orgSignup: OrgSignup;
   readonly orgAdmin: OrgAdmin;
   readonly apiKeyAdmin: ApiKeyAdmin;
+  readonly invitationAdmin: InvitationAdmin;
 }
 
 export interface Container {
@@ -200,6 +207,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     const memberships = createPrismaMembershipRepository(prisma, unitOfWork);
     const organizations = createPrismaOrganizationRepository(prisma, unitOfWork);
     const apiKeys = createPrismaApiKeyRepository(prisma, unitOfWork);
+    const invitations = createPrismaInvitationRepository(prisma, unitOfWork);
     auth = {
       resolve: createResolveUserPrincipalUseCase({
         clock,
@@ -222,6 +230,19 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
         unitOfWork,
         ids,
         clock,
+      }),
+      invitationAdmin: createInvitationAdmin({
+        invitations,
+        memberships,
+        organizations,
+        users,
+        unitOfWork,
+        audit,
+        ids,
+        clock,
+        logger,
+        consoleBaseUrl: config.api.corsAllowedOrigins[0] ?? 'http://localhost:3000',
+        sendMail: createSupabaseInvitationMailer(config.supabase, logger),
       }),
     };
   }

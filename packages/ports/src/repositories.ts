@@ -1,5 +1,6 @@
 import type {
   ApiKeyEnvironment,
+  InvitationStatus,
   MemberRole,
   MemberStatus,
   OrganizationApprovalStatus,
@@ -16,6 +17,7 @@ import type { TransactionScope } from './unit-of-work';
 import type {
   ApiKeyRecord,
   AuditEventRecord,
+  InvitationRecord,
   IdempotencyRecord,
   IdentityLinkRecord,
   InboxEventRecord,
@@ -125,6 +127,36 @@ export interface ApiKeyRepository {
   revoke(id: string, revokedAt: Date, scope?: TransactionScope): Promise<ApiKeyRecord>;
 }
 
+export interface CreateInvitationInput {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly email: string;
+  readonly role: MemberRole;
+  readonly tokenLookup: string;
+  readonly invitedBy: string | null;
+  readonly expiresAt: Date;
+  readonly correlationId: string;
+}
+
+export interface InvitationRepository {
+  create(input: CreateInvitationInput, scope?: TransactionScope): Promise<InvitationRecord>;
+  /** Looks an invitation up by the SHA-256 of the token carried in the emailed link. */
+  findByTokenLookup(
+    tokenLookup: string,
+    scope?: TransactionScope,
+  ): Promise<InvitationRecord | null>;
+  listForOrganization(
+    organizationId: string,
+    scope?: TransactionScope,
+  ): Promise<readonly InvitationRecord[]>;
+  updateStatus(
+    id: string,
+    status: InvitationStatus,
+    at: Date,
+    scope?: TransactionScope,
+  ): Promise<InvitationRecord>;
+}
+
 export interface CreateUserInput {
   readonly id: string;
   readonly primaryEmail: string;
@@ -137,6 +169,8 @@ export interface UserRepository {
   findById(id: string, scope?: TransactionScope): Promise<UserRecord | null>;
   findByEmail(email: string, scope?: TransactionScope): Promise<UserRecord | null>;
   touchLastSeen(id: string, at: Date, scope?: TransactionScope): Promise<void>;
+  /** Sets the name shown to teammates, e.g. the one given while accepting an invitation. */
+  updateDisplayName(id: string, displayName: string, scope?: TransactionScope): Promise<UserRecord>;
 }
 
 export interface CreateIdentityLinkInput {

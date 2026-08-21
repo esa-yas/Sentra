@@ -1,5 +1,6 @@
 export * from './organizations';
 export * from './api-keys';
+export * from './invitations';
 export * from './members';
 export * from './partners';
 export * from './partner-ingest';

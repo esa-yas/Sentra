@@ -3,8 +3,15 @@ import type {
   DevelopmentStatus,
   EventList,
   FlowRun,
+  AcceptInvitationRequest,
+  AcceptInvitationResponse,
   ApiKeyCreatedResponse,
   ApiKeyListResponse,
+  CreateInvitationRequest,
+  InvitationCreatedResponse,
+  InvitationListResponse,
+  InvitationPreview,
+  InvitationView,
   ApiKeyView,
   CreateApiKeyRequest,
   GoLiveRequestResponse,
@@ -267,6 +274,34 @@ export const postLogout = (token: string): Promise<ApiResult<{ ok: boolean }>> =
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: '{}',
+  });
+
+export const getInvitations = (): Promise<ApiResult<InvitationListResponse>> =>
+  apiFetch('/api/invitations');
+
+export const createInvitation = (
+  input: CreateInvitationRequest,
+): Promise<ApiResult<InvitationCreatedResponse>> =>
+  apiFetch('/api/invitations', { method: 'POST', body: JSON.stringify(input) });
+
+export const revokeInvitation = (invitationId: string): Promise<ApiResult<InvitationView>> =>
+  apiFetch(`/api/invitations/${encodeURIComponent(invitationId)}/revoke`, {
+    method: 'POST',
+    body: '{}',
+  });
+
+/** Public: what the invitee is shown before signing in. */
+export const previewInvitation = (token: string): Promise<ApiResult<InvitationPreview>> =>
+  apiFetch(`/api/invitations/preview?token=${encodeURIComponent(token)}`);
+
+export const acceptInvitation = (
+  input: AcceptInvitationRequest,
+  token?: string,
+): Promise<ApiResult<AcceptInvitationResponse>> =>
+  apiFetch('/api/invitations/accept', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    ...(token === undefined ? {} : { headers: { Authorization: `Bearer ${token}` } }),
   });
 
 export const getCurrentOrg = (): Promise<ApiResult<OrganizationDetailResponse>> =>

@@ -14,13 +14,19 @@ import { updateSession } from '@/lib/supabase/middleware';
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const path = request.nextUrl.pathname;
   const isPublic =
-    path === '/login' || path === '/signup' || path === '/docs' || path.startsWith('/auth/');
+    path === '/login' ||
+    path === '/signup' ||
+    path === '/invite' ||
+    path === '/docs' ||
+    path.startsWith('/auth/');
 
   // Safety net for email links. Supabase only honours `emailRedirectTo` when the URL is in the
   // project's allow-list; otherwise it falls back to the Site URL and the confirmation lands on
   // some other route carrying `code` or `token_hash`. Forward those to the confirmation screen
   // so the user always sees a result instead of a silent bounce to login.
-  if (!path.startsWith('/auth/')) {
+  // `/invite` is excluded: Supabase appends its own `code` to the invitation link, and that
+  // page has its own token to redeem — forwarding it here would strand the invitee.
+  if (!path.startsWith('/auth/') && path !== '/invite') {
     const params = request.nextUrl.searchParams;
     if (params.has('code') || params.has('token_hash') || params.has('error_description')) {
       const url = request.nextUrl.clone();

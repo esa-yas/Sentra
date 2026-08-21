@@ -2,6 +2,7 @@ import type {
   ActorType,
   ApiKeyEnvironment,
   ApiKeyStatus,
+  InvitationStatus,
   AuditOutcome,
   DataClassification,
   MemberRole,
@@ -61,6 +62,20 @@ export interface ApiKeyRecord {
   lastUsedAt: Date | null;
   createdAt: Date;
   createdBy: string | null;
+  revokedAt: Date | null;
+}
+
+export interface InvitationRecord {
+  id: string;
+  organizationId: string;
+  email: string;
+  role: MemberRole;
+  status: InvitationStatus;
+  tokenLookup: string;
+  invitedBy: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  acceptedAt: Date | null;
   revokedAt: Date | null;
 }
 

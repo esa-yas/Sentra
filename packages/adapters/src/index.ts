@@ -92,4 +92,8 @@ export {
   PrismaApiKeyRepository,
   createPrismaApiKeyRepository,
 } from './prisma/prisma-api-key-repository';
+export {
+  PrismaInvitationRepository,
+  createPrismaInvitationRepository,
+} from './prisma/prisma-invitation-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';

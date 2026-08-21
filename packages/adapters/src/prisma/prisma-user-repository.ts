@@ -51,6 +51,15 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? null : toRecord(row);
   }
 
+  public async updateDisplayName(
+    id: string,
+    displayName: string,
+    scope?: TransactionScope,
+  ): Promise<UserRecord> {
+    const row = await this.exec(scope).user.update({ where: { id }, data: { displayName } });
+    return toRecord(row);
+  }
+
   public async touchLastSeen(id: string, at: Date, scope?: TransactionScope): Promise<void> {
     await this.exec(scope).user.update({ where: { id }, data: { lastSeenAt: at } });
   }

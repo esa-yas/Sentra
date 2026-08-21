@@ -127,6 +127,13 @@ enum ApiKeyStatus {
   REVOKED
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 enum ActorType {
   USER
   PARTNER
@@ -208,6 +215,7 @@ model Organization {
   members            OrganizationMember[]
   partnerConnections PartnerConnection[]
   apiKeys            ApiKey[]
+  invitations        OrganizationInvitation[]
   auditEvents        AuditEvent[]
   outboxEvents       OutboxEvent[]
   idempotencyKeys    IdempotencyKey[]
@@ -406,6 +414,37 @@ model ApiKey {
   @@index([organizationId, status])
   @@index([environment, status])
   @@map("api_keys")
+}
+
+
+/// An invitation for a person to join an organization with a given role.
+///
+/// The invitation, not the invitee's own profile, is the authority on which organization and
+/// role they receive — user metadata is writable by the user themselves and could otherwise be
+/// forged to join any tenant. `tokenLookup` is the SHA-256 of the token in the emailed link.
+model OrganizationInvitation {
+  id             String           @id
+  organizationId String
+  /// Lower-cased address the invitation was issued to; the invitee cannot change it.
+  email          String
+  role           MemberRole
+  status         InvitationStatus @default(PENDING)
+  tokenLookup    String           @unique
+
+  invitedBy  String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  schemaVersion Int     @default(1)
+  correlationId String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([email, status])
+  @@map("organization_invitations")
 }
 
 // ---------------------------------------------------------------------------

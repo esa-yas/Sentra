@@ -89,6 +89,7 @@ export {
 export type {
   OrganizationRecord,
   ApiKeyRecord,
+  InvitationRecord,
   UserRecord,
   IdentityLinkRecord,
   MembershipRecord,
@@ -114,6 +115,8 @@ export type {
   UpdateOrganizationInput,
   ApiKeyRepository,
   CreateApiKeyInput,
+  InvitationRepository,
+  CreateInvitationInput,
   UserRepository,
   CreateUserInput,
   IdentityLinkRepository,
