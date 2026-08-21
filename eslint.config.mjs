@@ -6,6 +6,9 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/.next/**',
+      // Isolated Next build output (see the web package's `build:check`), so a verification
+      // build cannot disturb a running dev server's `.next`.
+      '**/.next-verify/**',
       '**/coverage/**',
       '**/node_modules/**',
       // Ephemeral agent worktrees hold full repo copies whose nested paths defeat the

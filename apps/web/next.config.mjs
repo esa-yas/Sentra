@@ -58,6 +58,11 @@ const apiOrigin = process.env.SENTRA_API_ORIGIN ?? 'http://127.0.0.1:3001';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Build output directory. Defaults to `.next`, which is also what `next dev` uses — so a
+  // production build run while a dev server is up overwrites the dev server's manifests and
+  // breaks it with "ENOENT ... app-build-manifest.json". Set NEXT_DIST_DIR (see the web
+  // package's `build:check` script) to build into a separate directory instead.
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   // Allow loading the dev server over the LAN (e.g. http://192.168.1.3:3000) without Next's
   // cross-origin dev warning. Update the IP if your machine's LAN address changes; extra values
   // can be supplied via SENTRA_DEV_ORIGINS (comma-separated hostnames).
