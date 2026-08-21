@@ -1,4 +1,9 @@
-import type { ReactNode } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+} from 'react';
 
 /** Decorative three-dot affordance shown on dashboard cards (matches the reference). */
 export function CardMenu() {
@@ -155,6 +160,110 @@ export function StatCard({
         {value}
       </p>
       {hint !== undefined && <p className="mt-2 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Console form controls.
+ *
+ * These match the auth screens (same radius, border, focus ring and accent) so a form inside the
+ * dashboard does not look like it came from a different product. Kept here rather than imported
+ * from `auth-ui` because that module carries the full-screen split layout with it.
+ */
+const CONTROL_CLASS =
+  'w-full rounded-lg border border-slate-700 bg-[var(--t-card-2)] px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-400 focus:border-[var(--t-accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--t-accent)_20%,transparent)] disabled:opacity-60';
+
+export function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className="mb-1.5 block text-xs font-medium text-slate-400">{children}</span>;
+}
+
+export function Input({
+  label,
+  className = '',
+  ...props
+}: { label?: string } & InputHTMLAttributes<HTMLInputElement>) {
+  const control = <input {...props} className={`${CONTROL_CLASS} ${className}`} />;
+  if (label === undefined) return control;
+  return (
+    <label className="block">
+      <FieldLabel>{label}</FieldLabel>
+      {control}
+    </label>
+  );
+}
+
+export function Select({
+  label,
+  className = '',
+  children,
+  ...props
+}: { label?: string } & SelectHTMLAttributes<HTMLSelectElement>) {
+  const control = (
+    <select {...props} className={`${CONTROL_CLASS} ${className}`}>
+      {children}
+    </select>
+  );
+  if (label === undefined) return control;
+  return (
+    <label className="block">
+      <FieldLabel>{label}</FieldLabel>
+      {control}
+    </label>
+  );
+}
+
+const BUTTON_TONES = {
+  primary:
+    'bg-[var(--t-accent)] text-white hover:bg-[var(--t-accent-strong)] border border-transparent',
+  secondary:
+    'border border-slate-700 bg-[var(--t-card)] text-slate-200 hover:bg-[var(--t-card-2)]',
+  danger: 'border border-red-500/40 bg-transparent text-red-300 hover:bg-red-500/10',
+} as const;
+
+export function Button({
+  tone = 'secondary',
+  size = 'md',
+  className = '',
+  children,
+  ...props
+}: {
+  tone?: keyof typeof BUTTON_TONES;
+  size?: 'sm' | 'md';
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
+  const sizing = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm';
+  return (
+    <button
+      {...props}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_TONES[tone]} ${sizing} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Inline message block. `tone` carries the meaning; the text carries the detail. */
+export function Notice({
+  tone,
+  title,
+  children,
+}: {
+  tone: 'info' | 'warn' | 'danger' | 'success';
+  title?: string;
+  children: ReactNode;
+}) {
+  const toneClass = {
+    info: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
+    warn: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    danger: 'border-red-500/30 bg-red-500/10 text-red-300',
+    success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  }[tone];
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+      {title !== undefined && <p className="text-sm font-semibold">{title}</p>}
+      <div className={`text-xs leading-relaxed ${title === undefined ? '' : 'mt-1 opacity-90'}`}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Notice } from '@/components/ui';
 import { getAuditEvents, verifyAuditChain, type AuditEventRow, type AuditVerification } from '@/lib/api';
 
 const short = (hash: string): string => (hash.length > 14 ? `${hash.slice(0, 14)}…` : hash);
@@ -60,17 +61,17 @@ export default function AuditChainPage() {
       />
 
       {error !== null ? (
-        <div className="mb-4 rounded-md border border-rose-800/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-300">
-          {error}
+        <div className="mb-5">
+          <Notice tone="danger">{error}</Notice>
         </div>
       ) : null}
 
       {result !== null ? (
         <div
-          className={`mb-6 rounded-lg border px-4 py-3.5 text-sm ${
+          className={`mb-6 rounded-xl border px-4 py-3.5 text-sm ${
             result.valid
-              ? 'border-emerald-800/50 bg-emerald-950/25 text-emerald-200'
-              : 'border-rose-800/60 bg-rose-950/30 text-rose-200'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
           }`}
         >
           {result.valid ? (
@@ -127,8 +128,8 @@ export default function AuditChainPage() {
                     <span
                       className={`ml-2 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
                         event.outcome === 'ALLOWED'
-                          ? 'bg-emerald-950/40 text-emerald-300'
-                          : 'bg-amber-950/40 text-amber-300'
+                          ? 'bg-emerald-500/10 text-emerald-300'
+                          : 'bg-amber-500/10 text-amber-300'
                       }`}
                     >
                       {event.outcome}
