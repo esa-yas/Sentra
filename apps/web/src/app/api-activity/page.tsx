@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PartnerApiRequestView } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge, EmptyState, ErrorNotice, Panel, Skeleton } from '@/components/ui';
+import { Badge, EmptyState, ErrorNotice, Panel, Skeleton, Input } from '@/components/ui';
 import { formatDateTime, formatMs } from '@/lib/format';
 import { getApiActivity, type ApiError } from '@/lib/api';
 
@@ -100,15 +100,13 @@ export default function ApiActivityPage() {
               ['environment', 'Environment'],
             ] as const
           ).map(([key, label]) => (
-            <label key={key} className="text-xs text-slate-400">
-              {label}
-              <input
-                value={filters[key]}
-                onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
-                placeholder={key === 'environment' ? 'SANDBOX | PRODUCTION' : ''}
-              />
-            </label>
+            <Input
+              key={key}
+              label={label}
+              value={filters[key]}
+              onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))}
+              placeholder={key === 'environment' ? 'SANDBOX | PRODUCTION' : ''}
+            />
           ))}
         </div>
       </Panel>

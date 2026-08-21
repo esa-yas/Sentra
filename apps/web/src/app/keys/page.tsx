@@ -3,7 +3,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ApiKeyCreatedResponse, ApiKeyView } from '@sentra/contracts';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge, EmptyState, ErrorNotice, Panel, Skeleton } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorNotice,
+  Input,
+  Panel,
+  Select,
+  Skeleton,
+} from '@/components/ui';
 import { createApiKey, getApiKeys, revokeApiKey, type ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
@@ -80,44 +89,34 @@ export default function ApiKeysPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Create a key" className="lg:col-span-1">
           <form onSubmit={onCreate} className="space-y-4">
-            <label className="block space-y-1">
-              <span className="text-xs text-slate-400">Name</span>
-              <input
-                type="text"
-                required
-                minLength={2}
-                maxLength={60}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Production server"
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs text-slate-400">Environment</span>
-              <select
-                value={environment}
-                onChange={(event) => setEnvironment(event.target.value as 'TEST' | 'LIVE')}
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
-              >
-                <option value="TEST">Test (sandbox)</option>
-                <option value="LIVE" disabled={!canIssueLive}>
-                  Live{canIssueLive ? '' : ' — requires approval'}
-                </option>
-              </select>
-            </label>
+            <Input
+              label="Name"
+              type="text"
+              required
+              minLength={2}
+              maxLength={60}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Production server"
+            />
+            <Select
+              label="Environment"
+              value={environment}
+              onChange={(event) => setEnvironment(event.target.value as 'TEST' | 'LIVE')}
+            >
+              <option value="TEST">Test (sandbox)</option>
+              <option value="LIVE" disabled={!canIssueLive}>
+                Live{canIssueLive ? '' : ' — requires approval'}
+              </option>
+            </Select>
             {!canIssueLive && (
               <p className="text-xs text-slate-500">
                 Your organization is in sandbox. Request production access to mint live keys.
               </p>
             )}
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-60"
-            >
+            <Button type="submit" tone="primary" className="w-full" disabled={busy}>
               {busy ? 'Creating…' : 'Create key'}
-            </button>
+            </Button>
           </form>
         </Panel>
 
@@ -173,13 +172,9 @@ export default function ApiKeysPage() {
                       </td>
                       <td className="py-2.5 text-right">
                         {key.status === 'ACTIVE' && (
-                          <button
-                            type="button"
-                            onClick={() => onRevoke(key.id)}
-                            className="rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium text-red-300 hover:bg-red-500/10"
-                          >
+                          <Button tone="danger" size="sm" onClick={() => onRevoke(key.id)}>
                             Revoke
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>

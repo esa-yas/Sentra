@@ -8,7 +8,7 @@
     "dev": "next dev --port 3000 --turbopack",
     "start": "next start --port 3000",
     "lint": "next lint",
-    "build:check": "NEXT_DIST_DIR=.next-verify next build"
+    "build:check": "NEXT_DIST_DIR=.next-verify next build; status=$?; git checkout -- tsconfig.json next-env.d.ts 2>/dev/null || true; exit $status"
   },
   "dependencies": {
     "@scalar/api-reference-react": "^0.9.63",

@@ -280,7 +280,7 @@ export function Badge({ className = '', children }: { className?: string; childr
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900/40 px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-[var(--t-card-2)] px-6 py-12 text-center">
       <p className="text-sm font-medium text-slate-300">{title}</p>
       <p className="mt-1 max-w-md text-xs text-slate-500">{description}</p>
     </div>
