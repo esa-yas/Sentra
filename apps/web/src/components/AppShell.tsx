@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
+import { resolveAuthRoute } from '@/lib/auth-route';
 import { SessionProvider, useSession } from '@/lib/session';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -36,20 +37,30 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * A signed-in user with no organization yet has nothing to operate, so send them to finish
- * setup at /signup (which, when already authenticated, shows just the create-organization
- * step). Only fires once identity has resolved, so it never flashes during load or in the
- * open demo mode (where auth is disabled and everyone is treated as a member).
+ * Routes the two states the console cannot render: an expired session, and a brand-new user
+ * who has no organization yet.
+ *
+ * It acts *only* on a successful identity resolution (`status === 'ready'`). An expired or
+ * rejected session goes to `/login` — never to onboarding — and a failed `/auth/me` (API down,
+ * network blip) does nothing at all, because "we could not ask" must never be mistaken for
+ * "this user has no organization". That mistake is what pushed returning operators into the
+ * create-organization screen after their session had been idle.
  */
 function OnboardingGate({ children }: { children: ReactNode }) {
-  const { authEnabled, loading, user, memberships } = useSession();
+  const { authEnabled, status, user, memberships } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (authEnabled && !loading && user !== null && memberships.length === 0) {
-      router.replace('/signup');
+    const destination = resolveAuthRoute({
+      authEnabled,
+      status,
+      hasUser: user !== null,
+      membershipCount: memberships.length,
+    });
+    if (destination !== null) {
+      router.replace(destination);
     }
-  }, [authEnabled, loading, user, memberships.length, router]);
+  }, [authEnabled, status, user, memberships.length, router]);
 
   return <>{children}</>;
 }

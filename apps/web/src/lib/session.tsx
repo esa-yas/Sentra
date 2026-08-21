@@ -14,9 +14,19 @@ import { createClient } from './supabase/client';
 import { clearActiveOrg, readActiveOrg, writeActiveOrg } from './active-org';
 import { getCurrentUser, postLogout, type AuthMembership, type MeResponse } from './api';
 
+/**
+ * How identity resolution ended.
+ *
+ * `error` is deliberately distinct from `ready`: a failed or unreachable `/auth/me` must never
+ * be mistaken for "this user has no organization", which would wrongly push an established
+ * operator into the create-organization flow. Callers act on `ready` only.
+ */
+export type SessionStatus = 'loading' | 'ready' | 'unauthenticated' | 'error';
+
 interface SessionValue {
   readonly authEnabled: boolean;
   readonly loading: boolean;
+  readonly status: SessionStatus;
   readonly user: MeResponse['user'] | null;
   readonly memberships: readonly AuthMembership[];
   readonly activeOrgId: string | null;
@@ -31,6 +41,7 @@ const SessionContext = createContext<SessionValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(authEnabled);
+  const [status, setStatus] = useState<SessionStatus>(authEnabled ? 'loading' : 'ready');
   const [user, setUser] = useState<MeResponse['user'] | null>(null);
   const [memberships, setMemberships] = useState<readonly AuthMembership[]>([]);
   const [activeOrgId, setActiveOrgIdState] = useState<string | null>(null);
@@ -52,15 +63,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (token === undefined) {
+        // No session at all (signed out, or the refresh token finally expired).
         if (active) {
           setUser(null);
           setMemberships([]);
+          setStatus('unauthenticated');
           setLoading(false);
         }
         return;
       }
       const me = await getCurrentUser(token);
       if (!active) return;
+
       if (me.data !== undefined) {
         setUser(me.data.user);
         setMemberships(me.data.memberships);
@@ -71,6 +85,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setActiveOrgIdState(chosen);
           writeActiveOrg(chosen);
         }
+        setStatus('ready');
+      } else if (me.status === 401 || me.status === 403) {
+        // The token is present but no longer accepted — treat it as signed out so the app
+        // routes to the login page, never to onboarding.
+        setUser(null);
+        setMemberships([]);
+        setStatus('unauthenticated');
+      } else {
+        // The API is unreachable or erroring. Keep whatever identity we already resolved and
+        // report the failure; an unresolved session must not look like a missing organization.
+        setStatus('error');
       }
       setLoading(false);
     };
@@ -113,6 +138,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value: SessionValue = {
     authEnabled,
     loading,
+    status,
     user,
     memberships,
     activeOrgId,

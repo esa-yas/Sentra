@@ -1,10 +1,25 @@
 'use client';
 
 import { Suspense, useState, type FormEvent } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
+import {
+  AuthBrandMark,
+  AuthBrandPanel,
+  AuthFooterLink,
+  AuthHeading,
+  AuthLayout,
+  Field,
+  FormError,
+  FormNotice,
+  IconMail,
+  IconSparkle,
+  OrDivider,
+  PasswordField,
+  SecondaryButton,
+  SubmitButton,
+} from '@/components/auth-ui';
 
 type Mode = 'password' | 'magic';
 
@@ -20,29 +35,26 @@ function LoginForm() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const signInWithPassword = async (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setNotice(null);
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (signInError !== null) {
-      // Deliberately generic so the form cannot be used to probe which emails exist.
-      setError('Sign-in failed. Check your email and password and try again.');
+
+    if (mode === 'password') {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      setBusy(false);
+      if (signInError !== null) {
+        // Deliberately generic so the form cannot be used to probe which emails exist.
+        setError('Sign-in failed. Check your email and password and try again.');
+        return;
+      }
+      router.push(next);
+      router.refresh();
       return;
     }
-    router.push(next);
-    router.refresh();
-  };
 
-  const sendMagicLink = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    const supabase = createClient();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
@@ -50,101 +62,107 @@ function LoginForm() {
     });
     setBusy(false);
     if (otpError !== null) {
-      setError('Could not send the magic link. Try again in a moment.');
+      setError('Could not send the sign-in link. Try again in a moment.');
       return;
     }
     setNotice('Check your email for a sign-in link.');
   };
 
   return (
-    <form
-      onSubmit={mode === 'password' ? signInWithPassword : sendMagicLink}
-      className="w-full max-w-sm space-y-4 rounded-xl border border-slate-800 bg-slate-900/70 p-6"
-    >
-      <div className="space-y-1">
-        <h1 className="text-lg font-semibold text-slate-100">Sign in to Sentra</h1>
-        <p className="text-xs text-slate-400">Operations Console — authorized personnel only.</p>
-      </div>
+    <form onSubmit={submit} className="space-y-5">
+      <AuthBrandMark />
+      <AuthHeading
+        title="Welcome back"
+        subtitle="Sign in to your operations console to monitor scam decisions and manage your API keys."
+      />
 
-      <label className="block space-y-1">
-        <span className="text-xs text-slate-400">Email</span>
-        <input
-          type="email"
+      <Field
+        label="Email"
+        icon={<IconMail />}
+        type="email"
+        required
+        autoComplete="email"
+        placeholder="you@company.com"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+
+      {mode === 'password' && (
+        <PasswordField
+          label="Password"
           required
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
+          autoComplete="current-password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          hint={
+            <button
+              type="button"
+              onClick={() => {
+                setMode('magic');
+                setError(null);
+                setNotice(null);
+              }}
+              className="text-xs font-medium text-[var(--t-accent)] hover:underline"
+            >
+              Forgot password?
+            </button>
+          }
         />
-      </label>
+      )}
 
-      {mode === 'password' ? (
-        <label className="block space-y-1">
-          <span className="text-xs text-slate-400">Password</span>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
-          />
-        </label>
-      ) : null}
+      {error !== null && <FormError>{error}</FormError>}
+      {notice !== null && <FormNotice>{notice}</FormNotice>}
 
-      {error !== null ? <p className="text-xs text-rose-400">{error}</p> : null}
-      {notice !== null ? <p className="text-xs text-emerald-400">{notice}</p> : null}
+      <SubmitButton busy={busy}>{mode === 'password' ? 'Sign in' : 'Send sign-in link'}</SubmitButton>
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-60"
-      >
-        {busy ? 'Please wait…' : mode === 'password' ? 'Sign in' : 'Send magic link'}
-      </button>
+      <OrDivider />
 
-      <button
-        type="button"
+      <SecondaryButton
+        icon={<IconSparkle />}
         onClick={() => {
           setMode(mode === 'password' ? 'magic' : 'password');
           setError(null);
           setNotice(null);
         }}
-        className="w-full text-center text-xs text-slate-400 hover:text-slate-200"
       >
-        {mode === 'password' ? 'Use a magic link instead' : 'Use a password instead'}
-      </button>
+        {mode === 'password' ? 'Continue with a magic link' : 'Continue with a password'}
+      </SecondaryButton>
 
-      <p className="border-t border-slate-800 pt-4 text-center text-xs text-slate-400">
-        New organization?{' '}
-        <Link href="/signup" className="font-medium text-sky-400 hover:text-sky-300">
-          Create an account
-        </Link>
-      </p>
+      <AuthFooterLink prompt="Don't have an account?" href="/signup" label="Sign up" />
     </form>
   );
 }
 
-export default function LoginPage() {
-  if (!authEnabled) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 px-4">
-        <div className="max-w-sm rounded-xl border border-slate-800 bg-slate-900/70 p-6 text-center">
-          <h1 className="text-lg font-semibold text-slate-100">Authentication not configured</h1>
-          <p className="mt-2 text-xs text-slate-400">
-            Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable sign-in.
-            The console is currently running in open demo mode.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+function AuthNotConfigured() {
   return (
-    <div className="flex h-screen items-center justify-center bg-slate-950 px-4">
-      <Suspense fallback={<div className="text-sm text-slate-400">Loading…</div>}>
-        <LoginForm />
-      </Suspense>
+    <div>
+      <AuthBrandMark />
+      <AuthHeading
+        title="Authentication not configured"
+        subtitle="Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable sign-in."
+      />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <AuthLayout
+      panel={
+        <AuthBrandPanel
+          headline="Stop scams before the money leaves."
+          quote="Every recommendation arrives with the reason codes behind it — and the bank always makes the final decision."
+        />
+      }
+    >
+      {authEnabled ? (
+        <Suspense fallback={<div className="text-sm text-slate-400">Loading…</div>}>
+          <LoginForm />
+        </Suspense>
+      ) : (
+        <AuthNotConfigured />
+      )}
+    </AuthLayout>
   );
 }

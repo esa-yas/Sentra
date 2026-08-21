@@ -32,6 +32,9 @@ export default defineConfig({
             'packages/*/src/**/__tests__/**/*.test.ts',
             'apps/api/src/**/__tests__/**/*.test.ts',
             'apps/worker/src/**/__tests__/**/*.test.ts',
+            // Framework-free web logic (routing rules, formatters). Component rendering is
+            // covered by the browser verification pass, not by this node-environment project.
+            'apps/web/src/**/__tests__/**/*.test.ts',
           ],
         },
       },
