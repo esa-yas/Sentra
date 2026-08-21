@@ -6,6 +6,12 @@ import { authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
 import { getCurrentUser, signUpOrganization } from '@/lib/api';
 import {
+  clearedPendingOrgMetadata,
+  readPendingOrg,
+  toPendingOrgMetadata,
+  type PendingOrganization,
+} from '@/lib/pending-org';
+import {
   AuthBrandMark,
   AuthBrandPanel,
   AuthFooterLink,
@@ -27,11 +33,13 @@ type OrgType = 'BANK' | 'TELECOM';
 
 /**
  * `account` — nobody is signed in: collect credentials and organization together.
- * `organization` — signed in with no organization yet: only the organization step remains.
+ * `finishing` — signed in with the organization details already captured at signup: create it
+ *   without asking again.
+ * `organization` — signed in with no organization and nothing stored: ask for the details.
  * `blocked` — signed in, but identity could not be resolved; creating an organization here
  *   could duplicate one that already exists, so the screen refuses rather than guesses.
  */
-type Step = 'checking' | 'account' | 'organization' | 'blocked';
+type Step = 'checking' | 'account' | 'finishing' | 'organization' | 'blocked';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -46,49 +54,15 @@ export default function SignupPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Decide which step this visitor actually needs. Anyone who already belongs to an
-  // organization is sent straight to the console — they must never land on "create your
-  // organization" just because a session went idle.
-  useEffect(() => {
-    if (!authEnabled) {
-      return;
-    }
-    let active = true;
-    void (async () => {
-      const { data } = await createClient().auth.getSession();
-      const token = data.session?.access_token;
-      if (!active) return;
-      if (token === undefined) {
-        setStep('account');
-        return;
-      }
-      const me = await getCurrentUser(token);
-      if (!active) return;
-      if (me.data !== undefined) {
-        if (me.data.memberships.length > 0) {
-          router.replace('/');
-          return;
-        }
-        setStep('organization');
-        return;
-      }
-      if (me.status === 401 || me.status === 403) {
-        setStep('account');
-        return;
-      }
-      setStep('blocked');
-    })();
-    return () => {
-      active = false;
-    };
-  }, [router]);
-
-  const createOrg = async (token?: string): Promise<boolean> => {
+  const createOrg = async (
+    pending: PendingOrganization,
+    token?: string,
+  ): Promise<boolean> => {
     const result = await signUpOrganization(
       {
-        organizationName: orgName.trim(),
-        organizationType: orgType,
-        jurisdiction: (jurisdiction.trim().toUpperCase() || 'US').slice(0, 2),
+        organizationName: pending.name,
+        organizationType: pending.type,
+        jurisdiction: pending.jurisdiction,
       },
       token,
     );
@@ -98,6 +72,65 @@ export default function SignupPage() {
     }
     return true;
   };
+
+  // Decide which step this visitor actually needs. Anyone who already belongs to an
+  // organization is sent straight to the console — they must never land on "create your
+  // organization" just because a session went idle. Anyone who supplied the details at signup
+  // has them applied automatically, so confirming an email never means filling the form twice.
+  useEffect(() => {
+    if (!authEnabled) {
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+      if (!active) return;
+      if (session === null) {
+        setStep('account');
+        return;
+      }
+
+      const me = await getCurrentUser(session.access_token);
+      if (!active) return;
+
+      if (me.data === undefined) {
+        setStep(me.status === 401 || me.status === 403 ? 'account' : 'blocked');
+        return;
+      }
+      if (me.data.memberships.length > 0) {
+        router.replace('/');
+        return;
+      }
+
+      const pending = readPendingOrg(session.user.user_metadata);
+      if (pending === null) {
+        setStep('organization');
+        return;
+      }
+
+      // The details were captured at signup — finish the job rather than asking again.
+      setStep('finishing');
+      const created = await createOrg(pending, session.access_token);
+      if (!active) return;
+      if (created) {
+        // Best effort: stop the details being replayed if this user ever returns here.
+        await supabase.auth.updateUser({ data: clearedPendingOrgMetadata() }).catch(() => undefined);
+        router.replace('/');
+        router.refresh();
+        return;
+      }
+      // Creation failed (validation, API down). Fall back to the form, prefilled.
+      setOrgName(pending.name);
+      setOrgType(pending.type);
+      setJurisdiction(pending.jurisdiction);
+      setStep('organization');
+    })();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -110,9 +143,15 @@ export default function SignupPage() {
         return;
       }
 
+      const pending: PendingOrganization = {
+        name: orgName.trim(),
+        type: orgType,
+        jurisdiction: (jurisdiction.trim().toUpperCase() || 'US').slice(0, 2),
+      };
+
       // Already signed in (e.g. returned from email confirmation): only the org step is left.
       if (step === 'organization') {
-        if (await createOrg()) {
+        if (await createOrg(pending)) {
           router.push('/');
           router.refresh();
         }
@@ -120,20 +159,29 @@ export default function SignupPage() {
       }
 
       const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
+          // Carried on the account so email confirmation cannot lose them.
+          data: toPendingOrgMetadata(pending),
+        },
+      });
       if (signUpError !== null) {
         setError(signUpError.message);
         return;
       }
       if (data.session !== null) {
-        if (await createOrg(data.session.access_token)) {
+        if (await createOrg(pending, data.session.access_token)) {
+          await supabase.auth.updateUser({ data: clearedPendingOrgMetadata() }).catch(() => undefined);
           router.push('/');
           router.refresh();
         }
         return;
       }
       setNotice(
-        'Account created. Confirm your email, then sign in — we’ll finish setting up your organization.',
+        'Account created. Check your email to confirm your address — your organization details are saved, so signing in is all that’s left.',
       );
     } finally {
       setBusy(false);
@@ -147,12 +195,25 @@ export default function SignupPage() {
     />
   );
 
-  if (step === 'checking') {
+  if (step === 'checking' || step === 'finishing') {
     return (
       <AuthLayout panel={panel}>
-        <div>
+        <div className="space-y-4">
           <AuthBrandMark />
-          <p className="text-sm text-slate-400">Checking your session…</p>
+          <AuthHeading
+            title={step === 'finishing' ? 'Setting up your organization' : 'One moment'}
+            subtitle={
+              step === 'finishing'
+                ? 'Applying the details you gave us when you signed up. This only takes a second.'
+                : 'Checking your session…'
+            }
+          />
+          <span
+            aria-hidden
+            className="block h-1 w-full overflow-hidden rounded-full bg-[var(--t-card-2)]"
+          >
+            <span className="block h-full w-1/3 animate-pulse rounded-full bg-[var(--t-accent)]" />
+          </span>
         </div>
       </AuthLayout>
     );

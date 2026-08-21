@@ -15,7 +15,14 @@ import { Topbar } from './Topbar';
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/docs') {
+  // Public, chrome-less routes: the auth screens (including the email-confirmation landing
+  // page under /auth/) and the developer documentation.
+  if (
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/docs' ||
+    pathname.startsWith('/auth/')
+  ) {
     return <>{children}</>;
   }
 
