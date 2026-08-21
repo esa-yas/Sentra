@@ -163,3 +163,5 @@ export {
 
 export type { OperationsReadModel } from './operations-read-model';
 export type { AuditReadModel, AuditEventList } from './audit-read-model';
+
+export type { EmailMessage, EmailSender } from './email';

@@ -99,6 +99,12 @@ export interface AppConfig {
     readonly partnerOrgMaxRequests: number;
     readonly partnerEndpointMaxRequests: number;
   };
+  readonly email: {
+    readonly resendApiKey?: string;
+    readonly fromAddress?: string;
+    readonly replyTo?: string;
+    readonly consoleBaseUrl: string;
+  };
   readonly sentry: {
     readonly dsn?: string;
     readonly environment: string;
@@ -313,6 +319,13 @@ export const loadConfig = (source: NodeJS.ProcessEnv = process.env): AppConfig =
       partnerWriteMaxRequests: env.RATE_LIMIT_PARTNER_WRITE_MAX_REQUESTS,
       partnerOrgMaxRequests: env.RATE_LIMIT_PARTNER_ORG_MAX_REQUESTS,
       partnerEndpointMaxRequests: env.RATE_LIMIT_PARTNER_ENDPOINT_MAX_REQUESTS,
+    },
+    email: {
+      ...(env.RESEND_API_KEY === undefined ? {} : { resendApiKey: env.RESEND_API_KEY }),
+      ...(env.RESEND_FROM_EMAIL === undefined ? {} : { fromAddress: env.RESEND_FROM_EMAIL }),
+      ...(env.RESEND_REPLY_TO === undefined ? {} : { replyTo: env.RESEND_REPLY_TO }),
+      consoleBaseUrl:
+        env.CONSOLE_BASE_URL ?? parseOriginList(env.CORS_ALLOWED_ORIGINS)[0] ?? 'http://localhost:3000',
     },
     sentry: {
       ...(env.SENTRY_DSN === undefined ? {} : { dsn: env.SENTRY_DSN }),

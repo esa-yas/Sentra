@@ -27,6 +27,7 @@ import {
   createPrismaUnitOfWork,
   createPrismaUserRepository,
   createRedisCacheProvider,
+  createResendEmailSender,
   createSupabaseUserTokenVerifier,
   createSystemClock,
   createUlidIdGenerator,
@@ -47,7 +48,7 @@ import { createQueueAdmin, type QueueAdmin } from './queue-admin';
 import { createApiKeyAdmin, type ApiKeyAdmin } from './auth/api-key-admin';
 import {
   createInvitationAdmin,
-  createSupabaseInvitationMailer,
+  createInvitationMailer,
   type InvitationAdmin,
 } from './auth/invitation-admin';
 import { createMemberAdmin, type MemberAdmin } from './auth/member-admin';
@@ -241,8 +242,22 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
         ids,
         clock,
         logger,
-        consoleBaseUrl: config.api.corsAllowedOrigins[0] ?? 'http://localhost:3000',
-        sendMail: createSupabaseInvitationMailer(config.supabase, logger),
+        consoleBaseUrl: config.email.consoleBaseUrl,
+        sendMail: createInvitationMailer(
+          createResendEmailSender(
+            {
+              ...(config.email.resendApiKey === undefined
+                ? {}
+                : { apiKey: config.email.resendApiKey }),
+              ...(config.email.fromAddress === undefined
+                ? {}
+                : { fromAddress: config.email.fromAddress }),
+              ...(config.email.replyTo === undefined ? {} : { replyTo: config.email.replyTo }),
+            },
+            logger,
+          ),
+          7,
+        ),
       }),
     };
   }

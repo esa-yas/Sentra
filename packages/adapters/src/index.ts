@@ -97,3 +97,16 @@ export {
   createPrismaInvitationRepository,
 } from './prisma/prisma-invitation-repository';
 export { contentDigestOf, canonicalBytes, signCanonicalRequest } from './crypto/request-signing';
+export {
+  ResendEmailSender,
+  createResendEmailSender,
+  createNoopEmailSender,
+  type ResendConfig,
+} from './email/resend-email-sender';
+export {
+  renderInvitationEmail,
+  renderWelcomeEmail,
+  type RenderedEmail,
+  type InvitationEmailInput,
+  type WelcomeEmailInput,
+} from './email/templates';

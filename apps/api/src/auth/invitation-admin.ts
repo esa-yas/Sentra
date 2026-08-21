@@ -12,11 +12,13 @@ import {
   type InvitationView,
   type MemberRole,
 } from '@sentra/contracts';
+import { renderInvitationEmail } from '@sentra/adapters';
 import { getCorrelationId, type Logger } from '@sentra/observability';
 import { createHash, randomBytes } from 'node:crypto';
 import type {
   AuditProvider,
   Clock,
+  EmailSender,
   IdGenerator,
   InvitationRecord,
   InvitationRepository,
@@ -29,6 +31,8 @@ import type {
 export interface InvitationActor {
   readonly userId: string;
   readonly label: string;
+  /** Shown as the sender in the invitation email, when known. */
+  readonly displayName?: string;
 }
 
 /** Sends the invitation email. Returns false when no mail could be sent. */
@@ -36,6 +40,8 @@ export type InvitationMailer = (input: {
   readonly email: string;
   readonly acceptUrl: string;
   readonly organizationName: string;
+  readonly role: MemberRole;
+  readonly inviterName?: string;
 }) => Promise<boolean>;
 
 export interface InvitationAdminDeps {
@@ -53,7 +59,8 @@ export interface InvitationAdminDeps {
 }
 
 /** Invitations are valid for one week. */
-const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TTL_DAYS = 7;
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000;
 
 const lookupOf = (token: string): string => createHash('sha256').update(token).digest('hex');
 
@@ -130,7 +137,13 @@ export class InvitationAdmin {
 
     const acceptUrl = `${this.deps.consoleBaseUrl}/invite?token=${encodeURIComponent(token)}`;
     const emailSent = await this.deps
-      .sendMail({ email, acceptUrl, organizationName: organization.legalName })
+      .sendMail({
+        email,
+        acceptUrl,
+        organizationName: organization.legalName,
+        role: input.role,
+        ...(actor.displayName === undefined ? {} : { inviterName: actor.displayName }),
+      })
       .catch((error: unknown) => {
         this.deps.logger.warn('invitation_email_failed', {
           invitationId: record.id,
@@ -299,40 +312,24 @@ export const createInvitationAdmin = (deps: InvitationAdminDeps): InvitationAdmi
   new InvitationAdmin(deps);
 
 /**
- * Sends invitations through Supabase's admin invite endpoint, which both creates the account
- * and mails the recipient. Requires the service-role key; without it no mail is sent and the
- * administrator passes the accept link on themselves.
+ * Sends the invitation through the configured {@link EmailSender}, rendered with the shared
+ * branded template. Returns false when no mail could be sent, so the caller can surface the
+ * accept link instead of implying an email arrived.
  */
-export const createSupabaseInvitationMailer = (
-  config: { readonly url?: string; readonly serviceRoleKey?: string },
-  logger: Logger,
-): InvitationMailer => {
-  return async ({ email, acceptUrl }) => {
-    const { url, serviceRoleKey } = config;
-    if (url === undefined || serviceRoleKey === undefined || serviceRoleKey === '') {
-      // Without a project URL and service-role key there is no way to send mail; the caller
-      // surfaces the accept link instead of silently doing nothing.
-      logger.warn('invitation_email_skipped', { reason: 'supabase_admin_not_configured' });
-      return false;
-    }
-    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/invite`, {
-      method: 'POST',
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, redirect_to: acceptUrl }),
+export const createInvitationMailer =
+  (sender: EmailSender, expiresInDays: number): InvitationMailer =>
+  async ({ email, acceptUrl, organizationName, role, inviterName }) => {
+    const rendered = renderInvitationEmail({
+      organizationName,
+      role,
+      acceptUrl,
+      expiresInDays,
+      ...(inviterName === undefined ? {} : { inviterName }),
     });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      // A user who already exists cannot be "invited" again; the link still works for them.
-      logger.warn('invitation_email_rejected', {
-        status: response.status,
-        detail: detail.slice(0, 200),
-      });
-      return false;
-    }
-    return true;
+    return sender.send({
+      to: email,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+    });
   };
-};

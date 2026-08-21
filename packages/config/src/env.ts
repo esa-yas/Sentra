@@ -150,6 +150,18 @@ export const envSchema = z.object({
   /** Per partner-connection + endpoint-class budget. */
   RATE_LIMIT_PARTNER_ENDPOINT_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(30),
 
+  /**
+   * Transactional email (Resend). Without an API key the platform still works — anything that
+   * would have been emailed reports that it was not sent, and the caller surfaces the link
+   * instead, rather than silently dropping it.
+   */
+  RESEND_API_KEY: optionalNonEmpty,
+  /** Must be an address on a domain verified in Resend, e.g. "Sentra <noreply@sentra.io>". */
+  RESEND_FROM_EMAIL: optionalNonEmpty,
+  RESEND_REPLY_TO: optionalNonEmpty,
+  /** Absolute base URL of the console, used to build links inside emails. */
+  CONSOLE_BASE_URL: optionalNonEmpty,
+
   SENTRY_DSN: optionalNonEmpty,
   SENTRY_ENVIRONMENT: z.string().min(1).default('local'),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
