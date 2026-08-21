@@ -10,13 +10,13 @@ export interface AuthRouteInput {
 /**
  * Decides where a console visitor must be sent, or `null` to stay put.
  *
- * The rule that matters: onboarding (`/signup`) is only ever reached from a *successful*
+ * The rule that matters: onboarding (`/onboarding`) is only ever reached from a *successful*
  * identity resolution that genuinely reported zero organizations. An expired or rejected
  * session goes to `/login`, and an unresolved one (API down, still loading) goes nowhere —
  * "we could not ask" is not the same as "this user has no organization", and conflating the
  * two is what dropped returning operators onto the create-organization screen.
  */
-export const resolveAuthRoute = (input: AuthRouteInput): '/login' | '/signup' | null => {
+export const resolveAuthRoute = (input: AuthRouteInput): '/login' | '/onboarding' | null => {
   if (!input.authEnabled) {
     return null;
   }
@@ -24,7 +24,7 @@ export const resolveAuthRoute = (input: AuthRouteInput): '/login' | '/signup' | 
     return '/login';
   }
   if (input.status === 'ready' && input.hasUser && input.membershipCount === 0) {
-    return '/signup';
+    return '/onboarding';
   }
   return null;
 };

@@ -16,7 +16,7 @@ describe('resolveAuthRoute', () => {
   });
 
   it('sends a genuinely new user to onboarding', () => {
-    expect(resolveAuthRoute({ ...base, status: 'ready', membershipCount: 0 })).toBe('/signup');
+    expect(resolveAuthRoute({ ...base, status: 'ready', membershipCount: 0 })).toBe('/onboarding');
   });
 
   // The reported bug: after an idle session the console pushed established operators onto the

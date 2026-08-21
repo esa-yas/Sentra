@@ -16,6 +16,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const isPublic =
     path === '/login' || path === '/signup' || path === '/docs' || path.startsWith('/auth/');
 
+  // Safety net for email links. Supabase only honours `emailRedirectTo` when the URL is in the
+  // project's allow-list; otherwise it falls back to the Site URL and the confirmation lands on
+  // some other route carrying `code` or `token_hash`. Forward those to the confirmation screen
+  // so the user always sees a result instead of a silent bounce to login.
+  if (!path.startsWith('/auth/')) {
+    const params = request.nextUrl.searchParams;
+    if (params.has('code') || params.has('token_hash') || params.has('error_description')) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/auth/confirm';
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Fail closed: with no auth backend there is no way to prove a session, so the only thing a
   // visitor may reach is the public surface. This removes the former open "demo mode".
   if (!authEnabled) {

@@ -4,13 +4,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
-import { getCurrentUser, signUpOrganization } from '@/lib/api';
-import {
-  clearedPendingOrgMetadata,
-  readPendingOrg,
-  toPendingOrgMetadata,
-  type PendingOrganization,
-} from '@/lib/pending-org';
 import {
   AuthBrandMark,
   AuthBrandPanel,
@@ -19,114 +12,44 @@ import {
   AuthLayout,
   Field,
   FormError,
-  FormNotice,
-  IconBuilding,
-  IconGlobe,
   IconMail,
-  OrDivider,
+  IconMailSent,
+  IconUser,
   PasswordField,
-  SelectField,
+  StatusBadge,
   SubmitButton,
 } from '@/components/auth-ui';
 
-type OrgType = 'BANK' | 'TELECOM';
-
 /**
- * `account` — nobody is signed in: collect credentials and organization together.
- * `finishing` — signed in with the organization details already captured at signup: create it
- *   without asking again.
- * `organization` — signed in with no organization and nothing stored: ask for the details.
- * `blocked` — signed in, but identity could not be resolved; creating an organization here
- *   could duplicate one that already exists, so the screen refuses rather than guesses.
+ * Account creation only: name, email, password.
+ *
+ * Everything about the organization is collected after the address is confirmed, in the
+ * onboarding flow — a new visitor should not have to answer business questions before they
+ * even own an account, and details captured here would be lost while the email is unconfirmed.
  */
-type Step = 'checking' | 'account' | 'finishing' | 'organization' | 'blocked';
-
 export default function SignupPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>(authEnabled ? 'checking' : 'account');
-
-  const [orgName, setOrgName] = useState('');
-  const [orgType, setOrgType] = useState<OrgType>('BANK');
-  const [jurisdiction, setJurisdiction] = useState('US');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
-  const createOrg = async (
-    pending: PendingOrganization,
-    token?: string,
-  ): Promise<boolean> => {
-    const result = await signUpOrganization(
-      {
-        organizationName: pending.name,
-        organizationType: pending.type,
-        jurisdiction: pending.jurisdiction,
-      },
-      token,
-    );
-    if (result.error !== undefined) {
-      setError(result.error.message);
-      return false;
-    }
-    return true;
-  };
-
-  // Decide which step this visitor actually needs. Anyone who already belongs to an
-  // organization is sent straight to the console — they must never land on "create your
-  // organization" just because a session went idle. Anyone who supplied the details at signup
-  // has them applied automatically, so confirming an email never means filling the form twice.
+  // Someone who is already signed in has no business on the signup form.
   useEffect(() => {
     if (!authEnabled) {
       return;
     }
     let active = true;
-    void (async () => {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-      if (!active) return;
-      if (session === null) {
-        setStep('account');
-        return;
-      }
-
-      const me = await getCurrentUser(session.access_token);
-      if (!active) return;
-
-      if (me.data === undefined) {
-        setStep(me.status === 401 || me.status === 403 ? 'account' : 'blocked');
-        return;
-      }
-      if (me.data.memberships.length > 0) {
-        router.replace('/');
-        return;
-      }
-
-      const pending = readPendingOrg(session.user.user_metadata);
-      if (pending === null) {
-        setStep('organization');
-        return;
-      }
-
-      // The details were captured at signup — finish the job rather than asking again.
-      setStep('finishing');
-      const created = await createOrg(pending, session.access_token);
-      if (!active) return;
-      if (created) {
-        // Best effort: stop the details being replayed if this user ever returns here.
-        await supabase.auth.updateUser({ data: clearedPendingOrgMetadata() }).catch(() => undefined);
-        router.replace('/');
-        router.refresh();
-        return;
-      }
-      // Creation failed (validation, API down). Fall back to the form, prefilled.
-      setOrgName(pending.name);
-      setOrgType(pending.type);
-      setJurisdiction(pending.jurisdiction);
-      setStep('organization');
-    })();
+    void createClient()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (active && data.session !== null) {
+          router.replace('/');
+        }
+      });
     return () => {
       active = false;
     };
@@ -134,55 +57,40 @@ export default function SignupPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
     setError(null);
-    setNotice(null);
+
+    if (password !== confirmPassword) {
+      setError('Those passwords don’t match.');
+      return;
+    }
+    if (!authEnabled) {
+      setError('Authentication is not configured, so accounts cannot be created.');
+      return;
+    }
+
+    setBusy(true);
     try {
-      if (!authEnabled) {
-        setError('Authentication is not configured, so organizations cannot be created.');
-        return;
-      }
-
-      const pending: PendingOrganization = {
-        name: orgName.trim(),
-        type: orgType,
-        jurisdiction: (jurisdiction.trim().toUpperCase() || 'US').slice(0, 2),
-      };
-
-      // Already signed in (e.g. returned from email confirmation): only the org step is left.
-      if (step === 'organization') {
-        if (await createOrg(pending)) {
-          router.push('/');
-          router.refresh();
-        }
-        return;
-      }
-
       const supabase = createClient();
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/confirm`,
-          // Carried on the account so email confirmation cannot lose them.
-          data: toPendingOrgMetadata(pending),
+          data: { full_name: fullName.trim() },
         },
       });
       if (signUpError !== null) {
         setError(signUpError.message);
         return;
       }
+      // With email confirmation switched off Supabase returns a session immediately, so the
+      // visitor can go straight to onboarding; otherwise we wait for them to confirm.
       if (data.session !== null) {
-        if (await createOrg(pending, data.session.access_token)) {
-          await supabase.auth.updateUser({ data: clearedPendingOrgMetadata() }).catch(() => undefined);
-          router.push('/');
-          router.refresh();
-        }
+        router.replace('/onboarding');
+        router.refresh();
         return;
       }
-      setNotice(
-        'Account created. Check your email to confirm your address — your organization details are saved, so signing in is all that’s left.',
-      );
+      setSentTo(email);
     } finally {
       setBusy(false);
     }
@@ -195,138 +103,95 @@ export default function SignupPage() {
     />
   );
 
-  if (step === 'checking' || step === 'finishing') {
+  if (sentTo !== null) {
     return (
       <AuthLayout panel={panel}>
-        <div className="space-y-4">
+        <div>
           <AuthBrandMark />
+          <StatusBadge tone="accent">
+            <IconMailSent />
+          </StatusBadge>
           <AuthHeading
-            title={step === 'finishing' ? 'Setting up your organization' : 'One moment'}
-            subtitle={
-              step === 'finishing'
-                ? 'Applying the details you gave us when you signed up. This only takes a second.'
-                : 'Checking your session…'
-            }
+            title="Check your email"
+            subtitle={`We sent a confirmation link to ${sentTo}. Open it to verify your address, then sign in — we’ll walk you through setting up your organization.`}
           />
-          <span
-            aria-hidden
-            className="block h-1 w-full overflow-hidden rounded-full bg-[var(--t-card-2)]"
-          >
-            <span className="block h-full w-1/3 animate-pulse rounded-full bg-[var(--t-accent)]" />
-          </span>
+          <div className="rounded-xl border border-slate-800 bg-[var(--t-card-2)] px-4 py-3 text-xs leading-relaxed text-slate-400">
+            Nothing yet? It can take a minute to arrive. Check your spam folder, and make sure the
+            address above is right.
+          </div>
+          <div className="mt-6 space-y-3">
+            <AuthFooterLink prompt="Already confirmed?" href="/login" label="Sign in" />
+            <button
+              type="button"
+              onClick={() => setSentTo(null)}
+              className="w-full text-center text-xs text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Use a different email address
+            </button>
+          </div>
         </div>
       </AuthLayout>
     );
   }
-
-  if (step === 'blocked') {
-    return (
-      <AuthLayout panel={panel}>
-        <div className="space-y-5">
-          <AuthBrandMark />
-          <AuthHeading
-            title="We couldn’t load your account"
-            subtitle="You’re signed in, but we can’t reach the Sentra API to check whether you already have an organization. Try again in a moment rather than creating a duplicate."
-          />
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="w-full rounded-xl bg-[var(--t-accent)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--t-accent-strong)]"
-          >
-            Try again
-          </button>
-          <AuthFooterLink prompt="Need a different account?" href="/login" label="Sign in" />
-        </div>
-      </AuthLayout>
-    );
-  }
-
-  const finishing = step === 'organization';
 
   return (
     <AuthLayout panel={panel}>
       <form onSubmit={submit} className="space-y-5">
         <AuthBrandMark />
         <AuthHeading
-          title={finishing ? 'Create your organization' : 'Create your account'}
-          subtitle={
-            finishing
-              ? 'One last step. Your organization starts in sandbox — you can request production access at any time.'
-              : 'Start in sandbox with synthetic data. Request production access when you’re ready to go live.'
-          }
+          title="Create your account"
+          subtitle="Start in sandbox with synthetic data. You’ll set up your organization in a moment."
         />
 
         <Field
-          label="Organization name"
-          icon={<IconBuilding />}
+          label="Full name"
+          icon={<IconUser />}
           type="text"
           required
           minLength={2}
           maxLength={80}
-          placeholder="Acme Bank"
-          value={orgName}
-          onChange={(event) => setOrgName(event.target.value)}
+          autoComplete="name"
+          placeholder="Ada Lovelace"
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
         />
 
-        <div className="grid grid-cols-2 gap-4">
-          <SelectField
-            label="Type"
-            icon={<IconBuilding />}
-            value={orgType}
-            onChange={(value) => setOrgType(value as OrgType)}
-          >
-            <option value="BANK">Bank</option>
-            <option value="TELECOM">Telecom</option>
-          </SelectField>
-          <Field
-            label="Country"
-            icon={<IconGlobe />}
-            type="text"
-            maxLength={2}
-            placeholder="US"
-            className="uppercase"
-            value={jurisdiction}
-            onChange={(event) => setJurisdiction(event.target.value)}
-          />
-        </div>
+        <Field
+          label="Work email"
+          icon={<IconMail />}
+          type="email"
+          required
+          autoComplete="email"
+          placeholder="you@company.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
 
-        {!finishing && (
-          <>
-            <Field
-              label="Work email"
-              icon={<IconMail />}
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-            <PasswordField
-              label="Password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </>
-        )}
+        <PasswordField
+          label="Password"
+          required
+          minLength={8}
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+
+        <PasswordField
+          label="Confirm password"
+          required
+          minLength={8}
+          autoComplete="new-password"
+          placeholder="Re-enter your password"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+        />
 
         {error !== null && <FormError>{error}</FormError>}
-        {notice !== null && <FormNotice>{notice}</FormNotice>}
 
-        <SubmitButton busy={busy}>
-          {finishing ? 'Create organization' : 'Create account'}
-        </SubmitButton>
+        <SubmitButton busy={busy}>Create account</SubmitButton>
 
-        {!finishing && (
-          <>
-            <OrDivider />
-            <AuthFooterLink prompt="Already have an account?" href="/login" label="Sign in" />
-          </>
-        )}
+        <AuthFooterLink prompt="Already have an account?" href="/login" label="Sign in" />
       </form>
     </AuthLayout>
   );

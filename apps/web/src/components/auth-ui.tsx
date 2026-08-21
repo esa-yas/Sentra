@@ -294,6 +294,131 @@ export function AuthBrandPanel({
   );
 }
 
+/** A large status glyph for terminal screens (email sent, verified, failed). */
+export function StatusBadge({
+  tone,
+  children,
+}: {
+  tone: 'accent' | 'success' | 'danger';
+  children: ReactNode;
+}) {
+  const toneClass = {
+    accent: 'bg-[color-mix(in_srgb,var(--t-accent)_14%,transparent)] text-[var(--t-accent)]',
+    success: 'bg-emerald-500/10 text-emerald-300',
+    danger: 'bg-red-500/10 text-red-300',
+  }[tone];
+  return (
+    <span className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
+
+/** "Step 2 of 3" plus a segmented bar. */
+export function StepProgress({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="mb-8">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--t-accent)]">
+          Step {current} of {total}
+        </span>
+        <span className="text-xs text-slate-500">{Math.round((current / total) * 100)}%</span>
+      </div>
+      <div className="flex gap-1.5" role="progressbar" aria-valuenow={current} aria-valuemin={1} aria-valuemax={total}>
+        {Array.from({ length: total }, (_, index) => (
+          <span
+            key={index}
+            className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+              index < current ? 'bg-[var(--t-accent)]' : 'bg-[var(--t-card-2)]'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A selectable card — used instead of a dropdown where the choice deserves explaining. */
+export function ChoiceCard({
+  selected,
+  onSelect,
+  icon,
+  title,
+  description,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+        selected
+          ? 'border-[var(--t-accent)] bg-[color-mix(in_srgb,var(--t-accent)_8%,transparent)]'
+          : 'border-slate-700 bg-[var(--t-card-2)] hover:border-slate-600'
+      }`}
+    >
+      <span
+        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+          selected ? 'bg-[var(--t-accent)] text-white' : 'bg-[var(--t-card)] text-slate-400'
+        }`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-100">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-slate-400">{description}</span>
+      </span>
+      <span
+        className={`mt-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border ${
+          selected ? 'border-[var(--t-accent)] bg-[var(--t-accent)]' : 'border-slate-600'
+        }`}
+        style={{ height: '18px', width: '18px' }}
+      >
+        {selected && (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m5 12.5 5 5 9-10" />
+          </svg>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** Low-emphasis action, e.g. "Back" in a wizard. */
+export function GhostButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:bg-[var(--t-card-2)]"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Read-only value shown where a field would be, for details the user cannot change. */
+export function LockedValue({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div>
+      <span className="mb-1.5 block text-sm font-medium text-slate-300">{label}</span>
+      <div className="flex items-center gap-2.5 rounded-xl border border-slate-700 bg-[var(--t-card-2)] px-3.5 py-2.5">
+        <span className="text-slate-400">
+          <IconLock />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{value}</span>
+      </div>
+      <span className="mt-1.5 block text-xs text-slate-500">{note}</span>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- icons -- */
 
 export function IconMail() {
@@ -328,6 +453,52 @@ export function IconGlobe() {
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z" />
+    </svg>
+  );
+}
+
+export function IconUser() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+    </svg>
+  );
+}
+
+export function IconBriefcase() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="7.5" width="18" height="12.5" rx="2.5" />
+      <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5M3 13h18" />
+    </svg>
+  );
+}
+
+export function IconBank() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10h18L12 4 3 10zM5 10v8M10 10v8M14 10v8M19 10v8M3 20h18" />
+    </svg>
+  );
+}
+
+export function IconAntenna() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 15a8 8 0 0 1 0-11M19 4a8 8 0 0 1 0 11M8 12.5a4 4 0 0 1 0-6M16 6.5a4 4 0 0 1 0 6" />
+      <circle cx="12" cy="9.5" r="1.5" />
+      <path d="M12 11v9" />
+    </svg>
+  );
+}
+
+export function IconMailSent() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8.5 12 14l9-5.5" />
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3 19l6-5.5M21 19l-6-5.5" />
     </svg>
   );
 }
