@@ -44,7 +44,12 @@ export const envSchema = z.object({
    * Which provider implementations the composition root wires. `in-memory` is the Slice 1
    * demonstration path; `real` selects Prisma/PostgreSQL persistence (Slice 2).
    */
-  SENTRA_PROVIDER_MODE: z.enum(['in-memory', 'real']).default('in-memory'),
+  /**
+   * `real` wires PostgreSQL, Redis and human authentication. `in-memory` has no user store, so
+   * the console — which now requires a login — cannot work against it; it remains only for
+   * hermetic unit tests, which opt in explicitly.
+   */
+  SENTRA_PROVIDER_MODE: z.enum(['in-memory', 'real']).default('real'),
 
   API_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   API_BODY_LIMIT_BYTES: z.coerce.number().int().min(1_024).max(5_242_880).default(262_144),

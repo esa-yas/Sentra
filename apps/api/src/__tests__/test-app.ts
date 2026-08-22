@@ -10,6 +10,8 @@ import { buildContainer, type Container } from '../container';
  */
 const TEST_ENV: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
+  // Explicit: the default is `real`, which would try to reach PostgreSQL and Redis.
+  SENTRA_PROVIDER_MODE: 'in-memory',
   DATABASE_URL: 'postgresql://sentra:sentra@localhost:5432/sentra_test?schema=public',
   DATABASE_DIRECT_URL: 'postgresql://sentra:sentra@localhost:5432/sentra_test?schema=public',
   REDIS_URL: 'redis://localhost:6379',

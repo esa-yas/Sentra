@@ -1,5 +1,4 @@
 import {
-  ForbiddenError,
   InvalidTokenError,
   PERMISSIONS,
   ValidationError,
@@ -9,7 +8,7 @@ import {
 import { Router, type Request } from 'express';
 import type { Container } from '../container';
 import { createAuthorizer } from '../auth/require-permission';
-import { getAuthContext } from '../auth/request-context';
+import { requireAuthContext } from '../auth/request-context';
 import { bearerTokenFrom } from '../auth/user-authentication';
 import { parseOrThrow } from '../validation';
 
@@ -32,10 +31,7 @@ export const createInvitationsRouter = (container: Container): Router => {
   const context = (
     req: Request,
   ): { organizationId: string; actor: { userId: string; label: string } } => {
-    const ctx = getAuthContext(req);
-    if (auth === undefined || ctx === undefined) {
-      throw new ForbiddenError('Managing invitations requires an authenticated administrator.');
-    }
+    const ctx = requireAuthContext(req, auth !== undefined, 'Managing invitations');
     return {
       organizationId: ctx.organizationId,
       actor: { userId: ctx.principal.id, label: ctx.principal.label },

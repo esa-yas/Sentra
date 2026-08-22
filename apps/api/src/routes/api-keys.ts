@@ -1,8 +1,8 @@
-import { ForbiddenError, PERMISSIONS, createApiKeyRequestSchema } from '@sentra/contracts';
+import { PERMISSIONS, createApiKeyRequestSchema } from '@sentra/contracts';
 import { Router, type Request } from 'express';
 import type { Container } from '../container';
 import { createAuthorizer } from '../auth/require-permission';
-import { getAuthContext } from '../auth/request-context';
+import { requireAuthContext } from '../auth/request-context';
 import { parseOrThrow } from '../validation';
 
 /**
@@ -13,6 +13,7 @@ import { parseOrThrow } from '../validation';
  */
 export const createApiKeysRouter = (container: Container): Router => {
   const router = Router();
+  const auth = container.auth;
   const apiKeyAdmin = container.auth?.apiKeyAdmin;
   const { requirePermission } = createAuthorizer(container.auth?.resolve);
   const read = requirePermission(PERMISSIONS.PARTNER_READ);
@@ -21,10 +22,7 @@ export const createApiKeysRouter = (container: Container): Router => {
   const context = (
     req: Request,
   ): { organizationId: string; actor: { userId: string; label: string } } => {
-    const ctx = getAuthContext(req);
-    if (apiKeyAdmin === undefined || ctx === undefined) {
-      throw new ForbiddenError('API key management requires an authenticated member.');
-    }
+    const ctx = requireAuthContext(req, auth !== undefined, 'API key management');
     return {
       organizationId: ctx.organizationId,
       actor: { userId: ctx.principal.id, label: ctx.principal.label },
