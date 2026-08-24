@@ -40,6 +40,24 @@ export interface PersistOutcomeInput {
   readonly source: string;
 }
 
+export interface RecordCaseFeedbackInput {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly caseId: string;
+  readonly assessment: 'SCAM' | 'LEGITIMATE' | 'UNCLEAR';
+  readonly note: string | null;
+  readonly correlationId: string;
+  readonly source: string;
+}
+
+export interface PendingCaseFeedbackRow {
+  readonly caseId: string;
+  readonly subjectRef: string;
+  readonly bankDecision: BankDecision;
+  readonly outcomeClassification: OutcomeClassification;
+  readonly decidedAt: Date;
+}
+
 export class PrismaPartnerDomainStore {
   public constructor(private readonly prisma: PrismaClient) {}
 
@@ -146,6 +164,71 @@ export class PrismaPartnerDomainStore {
       include: { riskAssessment: true, case: { include: { bankOutcomes: true } } },
     });
     return row === null ? null : recommendationViewSchema.parse(toRecommendationView(row, row.riskAssessment, []));
+  }
+
+  /**
+   * Cases whose telecom signal belongs to this telecom, where a bank has recorded a decision and
+   * the telecom has not yet given feedback. This is the pull side of the bank->telecom callback.
+   */
+  public async listPendingTelecomFeedback(
+    telecomOrganizationId: string,
+  ): Promise<readonly PendingCaseFeedbackRow[]> {
+    const cases = await this.prisma.correlationCase.findMany({
+      where: {
+        telecomRiskEvent: { organizationId: telecomOrganizationId },
+        bankOutcomes: { some: {} },
+        telecomFeedback: { none: { organizationId: telecomOrganizationId } },
+      },
+      include: { bankOutcomes: { orderBy: { outcomeRecordedAt: 'desc' }, take: 1 } },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+    });
+    const rows: PendingCaseFeedbackRow[] = [];
+    for (const c of cases) {
+      const outcome = c.bankOutcomes[0];
+      if (outcome === undefined) continue;
+      rows.push({
+        caseId: c.id,
+        subjectRef: c.subjectRef,
+        bankDecision: outcome.bankDecision as BankDecision,
+        outcomeClassification: outcome.outcomeClassification as OutcomeClassification,
+        decidedAt: outcome.outcomeRecordedAt ?? outcome.createdAt,
+      });
+    }
+    return rows;
+  }
+
+  /**
+   * Records a telecom's assessment of a case their signal touched. Verifies the case really is
+   * one of theirs (its telecom risk event belongs to them) before writing, so a telecom can only
+   * assess cases it actually contributed to.
+   */
+  public async recordCaseFeedback(
+    input: RecordCaseFeedbackInput,
+  ): Promise<{ ok: true; recordedAt: Date } | { ok: false; reason: 'CASE_NOT_FOUND' }> {
+    const owned = await this.prisma.correlationCase.findFirst({
+      where: { id: input.caseId, telecomRiskEvent: { organizationId: input.organizationId } },
+      select: { id: true },
+    });
+    if (owned === null) {
+      return { ok: false, reason: 'CASE_NOT_FOUND' };
+    }
+    const row = await this.prisma.telecomCaseFeedback.upsert({
+      where: {
+        organizationId_caseId: { organizationId: input.organizationId, caseId: input.caseId },
+      },
+      create: {
+        id: input.id,
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        assessment: input.assessment,
+        note: input.note,
+        correlationId: input.correlationId,
+        source: input.source,
+      },
+      update: { assessment: input.assessment, note: input.note },
+    });
+    return { ok: true, recordedAt: row.createdAt };
   }
 
   public async findLatestRecommendationForCase(

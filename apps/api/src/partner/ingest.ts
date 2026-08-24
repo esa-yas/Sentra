@@ -4,8 +4,12 @@ import {
   NotFoundError,
   PURPOSES,
   RESOURCE_TYPES,
+  ValidationError,
   type BankOutcomeRequest,
   type BankOutcomeResponse,
+  type CaseFeedbackRequest,
+  type CaseFeedbackResponse,
+  type PendingCaseFeedbackResponse,
   type PaymentIntentRequest,
   type PaymentIntentResponse,
   type TelecomRiskEventRequest,
@@ -163,6 +167,69 @@ export class PartnerIngest {
       outcomeClassification: input.outcomeClassification,
       correlationId,
       synthetic: context.connection.environment === 'SANDBOX',
+    };
+  }
+
+  /** Cases where this telecom's signal helped and a bank has now decided — awaiting their call. */
+  public async listPendingFeedback(
+    context: PartnerRequestContext,
+  ): Promise<PendingCaseFeedbackResponse> {
+    const rows = await this.deps.domain.listPendingTelecomFeedback(
+      context.connection.organizationId,
+    );
+    return {
+      items: rows.map((row) => ({
+        caseId: row.caseId,
+        subjectRef: row.subjectRef,
+        bankDecision: row.bankDecision,
+        outcomeClassification: row.outcomeClassification,
+        decidedAt: row.decidedAt.toISOString(),
+      })),
+    };
+  }
+
+  /** A telecom confirms whether a case their signal touched was a scam. */
+  public async submitCaseFeedback(
+    context: PartnerRequestContext,
+    input: CaseFeedbackRequest,
+  ): Promise<CaseFeedbackResponse> {
+    const id = this.deps.ids.generate();
+    const correlationId = getCorrelationId();
+    const result = await this.deps.domain.recordCaseFeedback({
+      id,
+      organizationId: context.connection.organizationId,
+      caseId: input.caseId,
+      assessment: input.assessment,
+      note: input.note ?? null,
+      correlationId,
+      source: `partner:${context.connection.id}`,
+    });
+    if (!result.ok) {
+      // Either the case does not exist or this telecom's signal did not contribute to it.
+      throw new ValidationError(
+        'That case is not one your signals contributed to, so you cannot assess it.',
+      );
+    }
+
+    await this.deps.audit.recordStandalone({
+      organizationId: context.connection.organizationId,
+      actorType: ACTOR_TYPES.PARTNER,
+      actorId: context.connection.id,
+      actorLabel: context.principal.label,
+      action: 'telecom_feedback.recorded',
+      resourceType: RESOURCE_TYPES.BANK_OUTCOME,
+      resourceId: id,
+      purpose: PURPOSES.PROTECT_PAYMENT,
+      outcome: AUDIT_OUTCOMES.ALLOWED,
+      correlationId,
+    });
+
+    return {
+      id,
+      caseId: input.caseId,
+      assessment: input.assessment,
+      correlationId,
+      recordedAt: result.recordedAt.toISOString(),
     };
   }
 

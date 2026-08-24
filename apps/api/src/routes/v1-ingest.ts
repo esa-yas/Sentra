@@ -3,6 +3,7 @@ import {
   PARTNER_SCOPES,
   assertNoForbiddenFields,
   bankOutcomeRequestSchema,
+  caseFeedbackRequestSchema,
   paymentIntentRequestSchema,
   telecomRiskEventRequestSchema,
   type PartnerScope,
@@ -98,6 +99,16 @@ export const createPartnerIngestRouter = (container: Container): Router => {
     }),
   );
 
+  // Telecom-only: confirm whether a case your signal touched was a scam. Reuses the telecom's
+  // risk-events scope, so only telecoms can submit feedback.
+  router.post(
+    '/case-feedback',
+    write(PARTNER_SCOPES.RISK_EVENTS_WRITE, async (req, context) => {
+      const input = parseOrThrow(caseFeedbackRequestSchema, req.body ?? {});
+      return container.partner!.ingest.submitCaseFeedback(context, input);
+    }),
+  );
+
   router.get('/recommendations/:id', async (req, res, next) => {
     if (container.partner === undefined) {
       res.status(503).json({
@@ -130,6 +141,38 @@ export const createPartnerIngestRouter = (container: Container): Router => {
         return;
       }
       res.json(recommendation);
+    } catch (error) {
+      if (error instanceof AppError) {
+        outcome.errorCode = error.code;
+        res.status(error.httpStatus);
+      }
+      next(error);
+    } finally {
+      const durationMs = Math.max(0, Math.round(container.clock.monotonicMs() - started));
+      await container.partner.authenticator
+        .recordActivity(req, res.statusCode || 500, durationMs, outcome, getCorrelationId())
+        .catch(() => undefined);
+    }
+  });
+
+  router.get('/case-feedback/pending', async (req, res, next) => {
+    if (container.partner === undefined) {
+      res.status(503).json({
+        error: {
+          code: 'dependency_unavailable',
+          message: 'Partner integration is not configured in this provider mode.',
+          correlationId: getCorrelationId(),
+        },
+      });
+      return;
+    }
+    const started = container.clock.monotonicMs();
+    const outcome: PartnerSecurityOutcome = emptySecurityOutcome();
+    try {
+      const context = await container.partner.authenticator.authenticate(req, outcome);
+      container.partner.authenticator.requireScope(context, PARTNER_SCOPES.CASES_READ);
+      await container.partner.authenticator.rateLimit(context, 'read', outcome);
+      res.json(await container.partner.ingest.listPendingFeedback(context));
     } catch (error) {
       if (error instanceof AppError) {
         outcome.errorCode = error.code;

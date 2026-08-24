@@ -127,6 +127,12 @@ enum ApiKeyStatus {
   REVOKED
 }
 
+enum TelecomCaseAssessment {
+  SCAM
+  LEGITIMATE
+  UNCLEAR
+}
+
 enum InvitationStatus {
   PENDING
   ACCEPTED
@@ -216,6 +222,7 @@ model Organization {
   partnerConnections PartnerConnection[]
   apiKeys            ApiKey[]
   invitations        OrganizationInvitation[]
+  telecomCaseFeedback TelecomCaseFeedback[]
   auditEvents        AuditEvent[]
   outboxEvents       OutboxEvent[]
   idempotencyKeys    IdempotencyKey[]
@@ -445,6 +452,33 @@ model OrganizationInvitation {
   @@index([organizationId, status])
   @@index([email, status])
   @@map("organization_invitations")
+}
+
+
+/// A telecom's confirmation of whether a correlated case was a scam.
+///
+/// Recorded after a bank has decided the case: the telecom sees the decision (their signal
+/// contributed to it) and reports back what it actually was, which is how the network learns.
+/// Keyed by (organizationId, caseId) so a telecom leaves at most one assessment per case.
+model TelecomCaseFeedback {
+  id             String                 @id
+  /// The telecom organization giving the assessment.
+  organizationId String
+  caseId         String
+  assessment     TelecomCaseAssessment
+  note           String?
+
+  correlationId String
+  source        String
+  schemaVersion Int    @default(1)
+  createdAt     DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         CorrelationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, caseId])
+  @@index([caseId])
+  @@map("telecom_case_feedback")
 }
 
 // ---------------------------------------------------------------------------
@@ -956,6 +990,7 @@ model CorrelationCase {
   recommendations Recommendation[]
   bankOutcomes    BankOutcome[]
   notifications   NotificationRecord[]
+  telecomFeedback TelecomCaseFeedback[]
 
   @@index([organizationId, status, openedAt(sort: Desc)])
   @@index([subjectRef])
