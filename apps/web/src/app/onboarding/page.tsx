@@ -88,6 +88,8 @@ export default function OnboardingPage() {
   const [joining, setJoining] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState('');
+  // True when the name arrived from signup, so onboarding never asks for it a second time.
+  const [nameKnown, setNameKnown] = useState(false);
   const [jobTitle, setJobTitle] = useState('');
   const [orgName, setOrgName] = useState('');
   const [orgType, setOrgType] = useState<OrgType>('BANK');
@@ -115,8 +117,9 @@ export default function OnboardingPage() {
       }
       const metadata = session.user.user_metadata as Record<string, unknown> | null;
       const storedName = metadata?.[PROFILE_METADATA.fullName];
-      if (typeof storedName === 'string') {
+      if (typeof storedName === 'string' && storedName.trim().length >= 2) {
         setFullName(storedName);
+        setNameKnown(true);
       }
 
       const me = await getCurrentUser(session.access_token);
@@ -298,21 +301,29 @@ export default function OnboardingPage() {
           {step === 1 && (
             <>
               <AuthHeading
-                title="First, about you"
-                subtitle="This is how your teammates will see you in the console."
+                title={
+                  nameKnown ? `Welcome, ${fullName.trim().split(' ')[0]}` : 'First, about you'
+                }
+                subtitle={
+                  nameKnown
+                    ? 'One more detail so your teammates know your role. You can skip it.'
+                    : 'This is how your teammates will see you in the console.'
+                }
               />
-              <Field
-                label="Full name"
-                icon={<IconUser />}
-                type="text"
-                required
-                minLength={2}
-                maxLength={80}
-                autoComplete="name"
-                placeholder="Ada Lovelace"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-              />
+              {!nameKnown && (
+                <Field
+                  label="Full name"
+                  icon={<IconUser />}
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  autoComplete="name"
+                  placeholder="Ada Lovelace"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                />
+              )}
               <Field
                 label="Job title"
                 icon={<IconBriefcase />}
