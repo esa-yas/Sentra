@@ -2,8 +2,9 @@
 
 import { Suspense, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authEnabled } from '@/lib/supabase/config';
+import { authConfigProblem, authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
+import { friendlyAuthError } from '@/lib/supabase/auth-errors';
 import {
   AuthBrandMark,
   AuthBrandPanel,
@@ -40,6 +41,12 @@ function LoginForm() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const problem = authConfigProblem();
+    if (problem !== null) {
+      setBusy(false);
+      setError(problem.detail);
+      return;
+    }
     const supabase = createClient();
 
     if (mode === 'password') {
@@ -62,7 +69,7 @@ function LoginForm() {
     });
     setBusy(false);
     if (otpError !== null) {
-      setError('Could not send the sign-in link. Try again in a moment.');
+      setError(friendlyAuthError(otpError));
       return;
     }
     setNotice('Check your email for a sign-in link.');

@@ -2,8 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { authEnabled } from '@/lib/supabase/config';
+import { authConfigProblem, authEnabled } from '@/lib/supabase/config';
 import { createClient } from '@/lib/supabase/client';
+import { friendlyAuthError } from '@/lib/supabase/auth-errors';
 import {
   AuthBrandMark,
   AuthBrandPanel,
@@ -36,6 +37,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const configProblem = authConfigProblem();
 
   // Someone who is already signed in has no business on the signup form.
   useEffect(() => {
@@ -67,6 +69,11 @@ export default function SignupPage() {
       setError('Authentication is not configured, so accounts cannot be created.');
       return;
     }
+    const problem = authConfigProblem();
+    if (problem !== null) {
+      setError(problem.detail);
+      return;
+    }
 
     setBusy(true);
     try {
@@ -80,7 +87,7 @@ export default function SignupPage() {
         },
       });
       if (signUpError !== null) {
-        setError(signUpError.message);
+        setError(friendlyAuthError(signUpError));
         return;
       }
       // With email confirmation switched off Supabase returns a session immediately, so the
@@ -142,6 +149,12 @@ export default function SignupPage() {
           title="Create your account"
           subtitle="Start in sandbox with synthetic data. You’ll set up your organization in a moment."
         />
+
+        {configProblem !== null && (
+          <FormError>
+            {configProblem.summary} {configProblem.detail}
+          </FormError>
+        )}
 
         <Field
           label="Full name"
