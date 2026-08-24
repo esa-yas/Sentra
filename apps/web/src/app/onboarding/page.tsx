@@ -56,6 +56,27 @@ const VOLUMES = [
   { value: 'unknown', label: 'Not sure yet' },
 ];
 
+// Telecoms don't move money — they observe network signals. Their onboarding asks about the
+// signals they can share and the size of their subscriber base, never payment volume.
+const TELECOM_SIGNALS = [
+  { value: '', label: 'Select one…' },
+  { value: 'sim-swap', label: 'SIM swaps / re-issues' },
+  { value: 'porting', label: 'Number porting (port-out requests)' },
+  { value: 'call-forwarding', label: 'Call-forwarding changes' },
+  { value: 'roaming', label: 'Roaming / unusual location' },
+  { value: 'device-change', label: 'New device on an account' },
+  { value: 'multiple', label: 'Several of the above' },
+];
+
+const SUBSCRIBER_BANDS = [
+  { value: '', label: 'Select one…' },
+  { value: '<100k', label: 'Under 100,000 subscribers' },
+  { value: '100k-1m', label: '100,000 – 1 million' },
+  { value: '1m-10m', label: '1 million – 10 million' },
+  { value: '10m+', label: 'Over 10 million' },
+  { value: 'unknown', label: 'Not sure yet' },
+];
+
 const PANELS = [
   {
     headline: 'Welcome to Sentra.',
@@ -99,6 +120,8 @@ export default function OnboardingPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const isTelecom = orgType === 'TELECOM';
 
   // Anyone who already has an organization is finished here; anyone signed out belongs at login.
   useEffect(() => {
@@ -167,6 +190,7 @@ export default function OnboardingPage() {
             [PROFILE_METADATA.jobTitle]: jobTitle.trim(),
             [PROFILE_METADATA.useCase]: useCase,
             [PROFILE_METADATA.volume]: volume,
+            organization_kind: orgType,
           },
         })
         .catch(() => undefined);
@@ -349,7 +373,7 @@ export default function OnboardingPage() {
                 required
                 minLength={2}
                 maxLength={80}
-                placeholder="Acme Bank"
+                placeholder={isTelecom ? 'Acme Mobile' : 'Acme Bank'}
                 value={orgName}
                 onChange={(event) => setOrgName(event.target.value)}
               />
@@ -386,37 +410,70 @@ export default function OnboardingPage() {
           {step === 3 && (
             <>
               <AuthHeading
-                title="How will you use Sentra?"
+                title={isTelecom ? 'What signals can you share?' : 'How will you use Sentra?'}
                 subtitle="Optional, and only used to tune what we show you first."
               />
-              <SelectField
-                label="Primary use case"
-                icon={<IconBriefcase />}
-                value={useCase}
-                onChange={setUseCase}
-              >
-                {USE_CASES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField
-                label="Expected payment volume"
-                icon={<IconGlobe />}
-                value={volume}
-                onChange={setVolume}
-              >
-                {VOLUMES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectField>
+              {isTelecom ? (
+                <>
+                  <SelectField
+                    label="Signals you can share"
+                    icon={<IconAntenna />}
+                    value={useCase}
+                    onChange={setUseCase}
+                  >
+                    {TELECOM_SIGNALS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <SelectField
+                    label="Subscriber base"
+                    icon={<IconGlobe />}
+                    value={volume}
+                    onChange={setVolume}
+                  >
+                    {SUBSCRIBER_BANDS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                </>
+              ) : (
+                <>
+                  <SelectField
+                    label="Primary use case"
+                    icon={<IconBriefcase />}
+                    value={useCase}
+                    onChange={setUseCase}
+                  >
+                    {USE_CASES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <SelectField
+                    label="Expected payment volume"
+                    icon={<IconGlobe />}
+                    value={volume}
+                    onChange={setVolume}
+                  >
+                    {VOLUMES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </SelectField>
+                </>
+              )}
               <div className="rounded-xl border border-slate-800 bg-[var(--t-card-2)] px-4 py-3 text-xs leading-relaxed text-slate-400">
                 <span className="font-semibold text-slate-300">{orgName || 'Your organization'}</span>{' '}
-                will be created in <span className="font-semibold text-slate-300">sandbox</span>. You
-                can request production access from the Organization page whenever you’re ready.
+                will be created in <span className="font-semibold text-slate-300">sandbox</span>.{' '}
+                {isTelecom
+                  ? 'You’ll share risk signals and receive callbacks on the cases they touch.'
+                  : 'You can request production access from the Organization page whenever you’re ready.'}
               </div>
             </>
           )}
