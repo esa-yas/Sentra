@@ -142,7 +142,9 @@ export const envSchema = z.object({
   DEFAULT_DEADLINE_MS: z.coerce.number().int().min(50).max(10_000).default(650),
   MAX_DEADLINE_MS: z.coerce.number().int().min(50).max(30_000).default(2_000),
   /** How far back a payment may look for a matching consented telecom signal. */
-  DECISION_CORRELATION_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
+  // Telecom↔payment correlation window. A suspicious call is only fresh for ~5 minutes, so the
+  // default is 300s; a call that ended long before a payment should not raise its score.
+  DECISION_CORRELATION_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(300),
 
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3_600).default(60),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).max(100_000).default(600),

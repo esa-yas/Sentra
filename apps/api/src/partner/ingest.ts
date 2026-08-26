@@ -12,6 +12,7 @@ import {
   type PendingCaseFeedbackResponse,
   type PaymentIntentRequest,
   type PaymentIntentResponse,
+  TELECOM_ACTIVE_WINDOW_SECONDS,
   type TelecomRiskEventRequest,
   type TelecomRiskEventResponse,
 } from '@sentra/contracts';
@@ -39,6 +40,9 @@ export class PartnerIngest {
     const id = this.deps.ids.generate();
     const correlationId = getCorrelationId();
     const observedAt = input.observedAt === undefined ? this.deps.clock.now() : new Date(input.observedAt);
+    // The signal is only "live" for a short window (5 min max) — a call must overlap the payment.
+    const windowSeconds = input.activeWindowSeconds ?? TELECOM_ACTIVE_WINDOW_SECONDS;
+    const expiresAt = new Date(observedAt.getTime() + windowSeconds * 1000);
 
     await this.deps.domain.persistTelecomEvent({
       id,
@@ -55,6 +59,7 @@ export class PartnerIngest {
       telecomEvidence: input.telecomEvidence,
       severity: input.severity,
       observedAt,
+      expiresAt,
       correlationId,
       source: `partner:${context.connection.id}`,
     });

@@ -15,6 +15,8 @@ import type { PrismaUnitOfWork } from './prisma-unit-of-work';
 import { reconstructFlow, toOperationalEvent, toRecommendationView } from './reconstruct-journey';
 
 const SOURCE = 'evaluate';
+/** Telecom signal lifetime for correlation: 5 minutes (mirrors TELECOM_ACTIVE_WINDOW_SECONDS). */
+const TELECOM_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
 /**
  * MVP correlation: join a telecom risk event to a payment intent when they share
@@ -121,6 +123,8 @@ export class PrismaDecisionPersistence implements DecisionPersistence {
               telecomEvidence: input.input.telecomEvidence,
               severity: input.input.recentSuspiciousCall ? 'HIGH' : 'INFO',
               observedAt: now,
+              // The inline signal is live for the same 5-minute window as an ingested one.
+              expiresAt: new Date(now.getTime() + TELECOM_ACTIVE_WINDOW_MS),
               correlationId,
               source: SOURCE,
             },
@@ -278,6 +282,9 @@ export class PrismaDecisionPersistence implements DecisionPersistence {
         subjectRef,
         purpose: PURPOSES.PROTECT_PAYMENT,
         observedAt: { gte: windowStart, lte: now },
+        // A signal only counts while it is still live: the call must overlap the payment.
+        // Older rows without an explicit expiry fall back to the outer correlation window.
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
         case: { is: null },
       },
       orderBy: { observedAt: 'desc' },

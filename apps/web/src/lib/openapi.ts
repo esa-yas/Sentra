@@ -159,7 +159,7 @@ Every response carries an \`x-correlation-id\` header — include it when you co
         summary: 'Share a network risk signal',
         operationId: 'ingestRiskEvent',
         description:
-          'Telecoms only. Report a network signal (a SIM swap, a suspicious call in progress, number porting, a device change) about a subject, keyed by a shared `subjectRef`. Sentra correlates it with any payment a bank evaluates for the same subject. You never send a phone number or a payment amount — only the consented, risk-relevant fields below.',
+          'Telecoms only. Report a network signal — a suspicious call **in progress**, a SIM swap, number porting, a device change — about a subject, keyed by a shared `subjectRef`. **Emit the moment the call starts, not after it ends:** the signal is live for 5 minutes (see `activeWindowSeconds`), and only a payment made while it is live has its score raised. A signal that arrives after the call, once the payment is already through, is too late. You never send a phone number or a payment amount — only the consented, risk-relevant fields below.',
         requestBody: {
           required: true,
           content: {
@@ -168,10 +168,11 @@ Every response carries an \`x-correlation-id\` header — include it when you co
               example: {
                 subjectRef: 'sbj_9f2c1a',
                 recentSuspiciousCall: true,
-                callDurationSeconds: 900,
+                callDurationSeconds: 180,
                 callerReputation: 'SUSPECT',
                 deviceChange: true,
                 severity: 'HIGH',
+                activeWindowSeconds: 300,
               },
             },
           },
@@ -385,7 +386,8 @@ Every response carries an \`x-correlation-id\` header — include it when you co
           eventType: { type: 'string', default: 'scam.risk.v1', example: 'scam.risk.v1' },
           recentSuspiciousCall: { type: 'boolean', default: false, description: 'A suspicious call is in progress or just ended.', example: true },
           callerReputation: { type: 'string', enum: ['UNKNOWN', 'TRUSTED', 'SUSPECT', 'KNOWN_BAD'], default: 'UNKNOWN', example: 'SUSPECT' },
-          callDurationSeconds: { type: 'integer', minimum: 0, maximum: 86400, default: 0, example: 900 },
+          callDurationSeconds: { type: 'integer', minimum: 0, maximum: 86400, default: 0, description: 'Call length so far, in seconds — send while the call is ongoing, not only its final length.', example: 180 },
+          activeWindowSeconds: { type: 'integer', minimum: 30, maximum: 300, default: 300, description: 'How long this signal stays live for correlation. Capped at 5 minutes; a call is only useful while it overlaps the payment.', example: 300 },
           deviceChange: { type: 'boolean', default: false, description: 'A new device appeared on the account.', example: true },
           accountTakeoverIndicators: { type: 'boolean', default: false, example: false },
           scamCampaignMatch: { type: 'boolean', default: false, description: 'Matches a known active scam campaign.', example: false },

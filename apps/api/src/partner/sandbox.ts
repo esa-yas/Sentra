@@ -4,6 +4,7 @@ import {
   PARTNER_SCOPES,
   PARTNER_SIGNING_HEADERS,
   PURPOSES,
+  TELECOM_ACTIVE_WINDOW_SECONDS,
   buildCanonicalSigningString,
   canonicalizePath,
   type PartnerConnectionKind,
@@ -66,6 +67,7 @@ export class PartnerSandbox {
           recentSuspiciousCall: true,
           callerReputation: 'KNOWN_BAD',
           callDurationSeconds: 120,
+          activeWindowSeconds: TELECOM_ACTIVE_WINDOW_SECONDS,
           scamCampaignMatch: true,
         }
       : {
@@ -133,6 +135,7 @@ export class PartnerSandbox {
           recentSuspiciousCall: true,
           callerReputation: 'KNOWN_BAD',
           callDurationSeconds: 120,
+          activeWindowSeconds: TELECOM_ACTIVE_WINDOW_SECONDS,
           deviceChange: false,
           accountTakeoverIndicators: false,
           scamCampaignMatch: true,

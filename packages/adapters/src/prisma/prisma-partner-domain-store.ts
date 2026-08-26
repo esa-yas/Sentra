@@ -24,6 +24,8 @@ export interface PersistTelecomEventInput {
   readonly telecomEvidence: string;
   readonly severity: string;
   readonly observedAt: Date;
+  /** When this signal stops being 'live' for correlation (observedAt + active window). */
+  readonly expiresAt: Date;
   readonly correlationId: string;
   readonly source: string;
 }
@@ -78,6 +80,7 @@ export class PrismaPartnerDomainStore {
         telecomEvidence: input.telecomEvidence as never,
         severity: input.severity as never,
         observedAt: input.observedAt,
+        expiresAt: input.expiresAt,
         correlationId: input.correlationId,
         source: input.source,
       },

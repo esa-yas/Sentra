@@ -14,6 +14,9 @@ import { purposeSchema } from '../purpose';
  * remains a separate, unauthenticated development interface and is not used on this path.
  */
 
+/** Default and maximum lifetime of a telecom risk signal, in seconds (5 minutes). */
+export const TELECOM_ACTIVE_WINDOW_SECONDS = 300;
+
 export const telecomRiskEventRequestSchema = z
   .object({
     subjectRef: subjectRefSchema,
@@ -28,6 +31,13 @@ export const telecomRiskEventRequestSchema = z
     telecomEvidence: evidenceAvailabilitySchema.default('OK'),
     severity: eventSeveritySchema.default('INFO'),
     observedAt: z.string().datetime().optional(),
+    /**
+     * How long this signal stays "live" for correlation, in seconds. A suspicious call is only
+     * useful while it is happening, so the window is short and capped at 5 minutes — emit the
+     * event when the call starts and it will correlate with any payment made in the next 5
+     * minutes, after which it is treated as stale.
+     */
+    activeWindowSeconds: z.number().int().min(30).max(TELECOM_ACTIVE_WINDOW_SECONDS).default(TELECOM_ACTIVE_WINDOW_SECONDS),
   })
   .strict();
 
