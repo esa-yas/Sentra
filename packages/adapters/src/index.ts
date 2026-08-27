@@ -117,3 +117,9 @@ export {
   type ProtectionSessionRow,
   type StoredAnswer,
 } from './prisma/prisma-protection-session-store';
+export {
+  PrismaGuardianStore,
+  createPrismaGuardianStore,
+  type UpsertGuardianInput,
+  type GuardianRecord,
+} from './prisma/prisma-guardian-store';

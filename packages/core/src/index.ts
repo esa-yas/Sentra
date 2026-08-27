@@ -61,3 +61,11 @@ export {
   MIN_LEARNED_MULTIPLIER,
   type SignalStat,
 } from './protection/learning';
+export {
+  resolveReviewRoute,
+  DEFAULT_PROTECTION_POLICY,
+  type ProtectionPolicyView,
+  type GuardianLinkView,
+  type ReviewRouteInput,
+  type ReviewRouteDecision,
+} from './protection/review-route';

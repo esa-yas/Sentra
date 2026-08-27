@@ -236,3 +236,42 @@ export const resolveSessionResponseSchema = z.object({
 });
 
 export type ResolveSessionResponse = z.infer<typeof resolveSessionResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Guardian preferences
+// ---------------------------------------------------------------------------
+
+/**
+ * A customer's guardian, and how they want a held payment routed.
+ *
+ * Both sides consent: the customer names the guardian here, and the guardian must accept before
+ * a payment is ever routed to them. Until then, holds go to the bank.
+ */
+export const guardianStatusSchema = z.enum(['PENDING', 'ACTIVE', 'REVOKED']);
+
+export type GuardianStatus = z.infer<typeof guardianStatusSchema>;
+
+export const setGuardianRequestSchema = z
+  .object({
+    /** The customer's routing choice. GUARDIAN_THEN_BANK escalates when they don't respond. */
+    reviewRoute: reviewRouteSchema,
+    /** Display name only, e.g. "Sara (daughter)". */
+    guardianLabel: z.string().trim().min(1).max(80),
+    /** Pseudonymous handle for reaching them — a push-token reference, never a raw phone number. */
+    contactRef: z.string().trim().min(6).max(256),
+  })
+  .strict();
+
+export type SetGuardianRequest = z.infer<typeof setGuardianRequestSchema>;
+
+export const guardianViewSchema = z.object({
+  subjectRef: z.string(),
+  reviewRoute: reviewRouteSchema,
+  guardianLabel: z.string(),
+  status: guardianStatusSchema,
+  acceptedAt: z.string().datetime().nullable(),
+  /** True when a hold would actually reach this guardian right now. */
+  activeForRouting: z.boolean(),
+});
+
+export type GuardianView = z.infer<typeof guardianViewSchema>;

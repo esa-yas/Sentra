@@ -19,6 +19,7 @@ import {
   createPrismaPartnerDirectory,
   createPrismaPartnerDomainStore,
   createPrismaProtectionSessionStore,
+  createPrismaGuardianStore,
   createPrismaPartnerSigningKeyRepository,
   createPrismaApiKeyRepository,
   createPrismaInvitationRepository,
@@ -339,6 +340,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     ids,
     audit,
     store: createPrismaProtectionSessionStore(prisma),
+    guardians: createPrismaGuardianStore(prisma),
   });
   const sandbox = createPartnerSandbox({
     clock,

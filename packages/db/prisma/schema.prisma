@@ -127,6 +127,20 @@ enum ApiKeyStatus {
   REVOKED
 }
 
+enum GuardianStatus {
+  /// Named by the customer, but the guardian has not accepted yet. Never routed to.
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum ReviewRoute {
+  NONE
+  BANK
+  GUARDIAN
+  GUARDIAN_THEN_BANK
+}
+
 enum ProtectionVerdict {
   PROCEED
   WARN
@@ -237,6 +251,8 @@ model Organization {
   invitations        OrganizationInvitation[]
   telecomCaseFeedback TelecomCaseFeedback[]
   protectionSessions  ProtectionSession[]
+  protectionPolicy    ProtectionPolicy?
+  guardianLinks       GuardianLink[]
   auditEvents        AuditEvent[]
   outboxEvents       OutboxEvent[]
   idempotencyKeys    IdempotencyKey[]
@@ -563,6 +579,63 @@ model SignalOutcomeStat {
   @@unique([organizationId, signalKey])
   @@index([signalKey])
   @@map("signal_outcome_stats")
+}
+
+
+/// The bank's own limits on guardian review. Everything above the "Sentra advises" line belongs
+/// to the bank: whether guardians are allowed at all, how much one may release, the risk level
+/// at which a case is too serious for a family member, and how long to wait for them.
+model ProtectionPolicy {
+  id             String  @id
+  organizationId String  @unique
+
+  guardianEnabled Boolean @default(true)
+  /// A guardian may release up to this amount; anything larger always goes to the bank.
+  releaseCeiling  Decimal @db.Decimal(18, 2) @default(2000)
+  /// At or above this score the case skips the guardian entirely.
+  overrideScore   Int     @default(90)
+  /// How long a guardian has before the hold escalates to the bank.
+  windowSeconds   Int     @default(600)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("protection_policies")
+}
+
+/// A customer's chosen guardian, and how they want a held payment routed.
+///
+/// Both sides consent: the customer names the guardian, and the guardian must accept before any
+/// payment is ever routed to them (`PENDING` is never routed to). This is what makes extra
+/// protection a service people opt into rather than something applied to them.
+model GuardianLink {
+  id             String @id
+  organizationId String
+  /// The protected customer, by the same pseudonymous reference the engine scores.
+  subjectRef     String
+
+  /// How the customer wants a hold handled. Their choice, changeable at any time.
+  reviewRoute ReviewRoute    @default(BANK)
+  /// Display name only, e.g. "Sara (daughter)".
+  guardianLabel String
+  /// Pseudonymous handle for reaching them — a push-token reference, never a raw phone number.
+  contactRef    String
+  status        GuardianStatus @default(PENDING)
+
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  correlationId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, subjectRef])
+  @@index([status])
+  @@map("guardian_links")
 }
 
 // ---------------------------------------------------------------------------

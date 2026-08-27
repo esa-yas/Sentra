@@ -13,6 +13,8 @@ import {
   type ResolveSessionResponse,
   type ReviewRoute,
   type SubmitAnswersRequest,
+  type GuardianView,
+  type SetGuardianRequest,
   type SubmitAnswersResponse,
 } from '@sentra/contracts';
 import {
@@ -28,8 +30,14 @@ import {
   toDisplayReasons,
   toPollQuestion,
   verdictForScore,
+  resolveReviewRoute,
+  DEFAULT_PROTECTION_POLICY,
 } from '@sentra/core';
-import type { PrismaProtectionSessionStore, StoredAnswer } from '@sentra/adapters';
+import type {
+  PrismaGuardianStore,
+  PrismaProtectionSessionStore,
+  StoredAnswer,
+} from '@sentra/adapters';
 import type { AuditProvider, Clock, IdGenerator } from '@sentra/ports';
 import { getCorrelationId } from '@sentra/observability';
 import type { PartnerRequestContext } from './authenticator';
@@ -39,6 +47,7 @@ export interface ProtectionSessionDeps {
   readonly ids: IdGenerator;
   readonly audit: AuditProvider;
   readonly store: PrismaProtectionSessionStore;
+  readonly guardians: PrismaGuardianStore;
 }
 
 /**
@@ -210,7 +219,13 @@ export class ProtectionSessionService {
         reasons,
         afterAnswers: true,
       }),
-      reviewRoute: this.routeFor(verdict),
+      reviewRoute: await this.routeFor(
+        organizationId,
+        session.subjectRef,
+        verdict,
+        score,
+        session.amount,
+      ),
       caseReference: session.caseReference,
     };
   }
@@ -251,11 +266,111 @@ export class ProtectionSessionService {
   }
 
   /**
-   * Where a held payment goes. The guardian route is chosen per customer in the Sentra app; until
-   * that preference is wired through, every hold goes to the bank — the safe default.
+   * Where a held payment goes: the customer's own choice, inside the limits the bank sets.
+   * Resolved fresh on every hold so a guardian revoked a minute ago is never routed to.
    */
-  private routeFor(verdict: SubmitAnswersResponse['verdict']): ReviewRoute {
-    return verdict === PROTECTION_VERDICTS.HOLD ? REVIEW_ROUTES.BANK : REVIEW_ROUTES.NONE;
+  private async routeFor(
+    organizationId: string,
+    subjectRef: string,
+    verdict: SubmitAnswersResponse['verdict'],
+    riskScore: number,
+    amount: number,
+  ): Promise<ReviewRoute> {
+    if (verdict !== PROTECTION_VERDICTS.HOLD) {
+      return REVIEW_ROUTES.NONE;
+    }
+    const [policy, guardian] = await Promise.all([
+      this.deps.guardians.policyFor(organizationId),
+      this.deps.guardians.guardianFor(organizationId, subjectRef),
+    ]);
+    return resolveReviewRoute({
+      verdict,
+      riskScore,
+      amount,
+      policy: policy ?? DEFAULT_PROTECTION_POLICY,
+      guardian,
+    }).route;
+  }
+
+  /** Names or updates the customer's guardian. A new person must accept before being routed to. */
+  public async setGuardian(
+    context: PartnerRequestContext,
+    subjectRef: string,
+    input: SetGuardianRequest,
+  ): Promise<GuardianView> {
+    const record = await this.deps.guardians.upsertGuardian({
+      id: this.deps.ids.generate(),
+      organizationId: context.connection.organizationId,
+      subjectRef,
+      reviewRoute: input.reviewRoute,
+      guardianLabel: input.guardianLabel,
+      contactRef: input.contactRef,
+      correlationId: getCorrelationId(),
+    });
+    await this.record(context, 'guardian.set', record.id, getCorrelationId());
+    return this.toGuardianView(subjectRef, record);
+  }
+
+  public async getGuardian(
+    context: PartnerRequestContext,
+    subjectRef: string,
+  ): Promise<GuardianView> {
+    const record = await this.deps.guardians.guardianFor(
+      context.connection.organizationId,
+      subjectRef,
+    );
+    if (record === null) {
+      throw new NotFoundError('guardian', subjectRef);
+    }
+    return this.toGuardianView(subjectRef, record);
+  }
+
+  /** The guardian accepting for themselves — without this, holds keep going to the bank. */
+  public async acceptGuardian(
+    context: PartnerRequestContext,
+    subjectRef: string,
+  ): Promise<GuardianView> {
+    const record = await this.deps.guardians.acceptGuardian(
+      context.connection.organizationId,
+      subjectRef,
+      this.deps.clock.now(),
+    );
+    if (record === null) {
+      throw new NotFoundError('guardian', subjectRef);
+    }
+    await this.record(context, 'guardian.accepted', record.id, getCorrelationId());
+    return this.toGuardianView(subjectRef, record);
+  }
+
+  public async revokeGuardian(
+    context: PartnerRequestContext,
+    subjectRef: string,
+  ): Promise<{ subjectRef: string; revoked: true }> {
+    await this.deps.guardians.revokeGuardian(
+      context.connection.organizationId,
+      subjectRef,
+      this.deps.clock.now(),
+    );
+    await this.record(context, 'guardian.revoked', subjectRef, getCorrelationId());
+    return { subjectRef, revoked: true };
+  }
+
+  private toGuardianView(
+    subjectRef: string,
+    record: { reviewRoute: ReviewRoute; status: string; guardianLabel: string; acceptedAt: Date | null },
+  ): GuardianView {
+    return {
+      subjectRef,
+      reviewRoute: record.reviewRoute,
+      guardianLabel: record.guardianLabel,
+      status: record.status as GuardianView['status'],
+      acceptedAt: record.acceptedAt === null ? null : record.acceptedAt.toISOString(),
+      // Only an accepted guardian on a guardian route would actually receive a hold.
+      activeForRouting:
+        record.status === 'ACTIVE' &&
+        (record.reviewRoute === REVIEW_ROUTES.GUARDIAN ||
+          record.reviewRoute === REVIEW_ROUTES.GUARDIAN_THEN_BANK),
+    };
   }
 
   private async record(

@@ -5,6 +5,7 @@ import {
   bankOutcomeRequestSchema,
   caseFeedbackRequestSchema,
   protectionSessionRequestSchema,
+  setGuardianRequestSchema,
   resolveSessionRequestSchema,
   submitAnswersRequestSchema,
   paymentIntentRequestSchema,
@@ -138,6 +139,40 @@ export const createPartnerIngestRouter = (container: Container): Router => {
         input,
       ) as Promise<Record<string, unknown>>;
     }),
+  );
+
+  // Guardian preferences. The customer's routing choice and who they trust to review a hold.
+  // A newly named guardian is always PENDING until they accept, and PENDING never receives a hold.
+  router.put(
+    '/protection-preferences/:subjectRef/guardian',
+    write(PARTNER_SCOPES.PAYMENT_INTENTS_WRITE, async (req, context) => {
+      const input = parseOrThrow(setGuardianRequestSchema, req.body ?? {});
+      return container.partner!.protectionSessions.setGuardian(
+        context,
+        req.params['subjectRef'] as string,
+        input,
+      ) as Promise<Record<string, unknown>>;
+    }),
+  );
+
+  router.post(
+    '/protection-preferences/:subjectRef/guardian/accept',
+    write(PARTNER_SCOPES.PAYMENT_INTENTS_WRITE, async (req, context) =>
+      container.partner!.protectionSessions.acceptGuardian(
+        context,
+        req.params['subjectRef'] as string,
+      ) as Promise<Record<string, unknown>>,
+    ),
+  );
+
+  router.post(
+    '/protection-preferences/:subjectRef/guardian/revoke',
+    write(PARTNER_SCOPES.PAYMENT_INTENTS_WRITE, async (req, context) =>
+      container.partner!.protectionSessions.revokeGuardian(
+        context,
+        req.params['subjectRef'] as string,
+      ) as Promise<Record<string, unknown>>,
+    ),
   );
 
   // Telecom-only: confirm whether a case your signal touched was a scam. Reuses the telecom's
