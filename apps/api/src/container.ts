@@ -18,6 +18,7 @@ import {
   createPrismaPartnerConnectionRepository,
   createPrismaPartnerDirectory,
   createPrismaPartnerDomainStore,
+  createPrismaProtectionSessionStore,
   createPrismaPartnerSigningKeyRepository,
   createPrismaApiKeyRepository,
   createPrismaInvitationRepository,
@@ -59,6 +60,10 @@ import { createPartnerAuthenticator, type PartnerAuthenticator } from './partner
 import { createPartnerIdempotency, type PartnerIdempotency } from './partner/idempotency';
 import { createPartnerIngest, type PartnerIngest } from './partner/ingest';
 import { createPartnerSandbox, type PartnerSandbox } from './partner/sandbox';
+import {
+  createProtectionSessionService,
+  type ProtectionSessionService,
+} from './partner/protection-session';
 import type {
   PartnerApiActivityStore,
   PartnerConnectionRepository,
@@ -77,6 +82,7 @@ export interface PartnerRuntime {
   readonly admin: PartnerAdmin;
   readonly ingest: PartnerIngest;
   readonly sandbox: PartnerSandbox;
+  readonly protectionSessions: ProtectionSessionService;
   readonly activity: PartnerApiActivityStore;
   readonly directory: PartnerDirectoryReadModel;
   readonly connections: PartnerConnectionRepository;
@@ -328,6 +334,12 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
     domain,
     evaluate,
   });
+  const protectionSessions = createProtectionSessionService({
+    clock,
+    ids,
+    audit,
+    store: createPrismaProtectionSessionStore(prisma),
+  });
   const sandbox = createPartnerSandbox({
     clock,
     ids,
@@ -358,6 +370,7 @@ export const buildContainer = async (config: AppConfig, logger: Logger): Promise
       admin,
       ingest,
       sandbox,
+      protectionSessions,
       activity,
       directory,
       connections,

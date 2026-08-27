@@ -34,3 +34,30 @@ export {
   type ResolveUserPrincipalUseCase,
   type ResolvedUserSession,
 } from './identity/resolve-user-principal';
+
+export {
+  QUESTION_BANK,
+  selectQuestions,
+  toPollQuestion,
+  signalForAnswer,
+  answerSignalKey,
+  type QuestionDefinition,
+  type QuestionOptionDefinition,
+} from './protection/questions';
+export {
+  toDisplayReasons,
+  verdictForScore,
+  adjustScoreForAnswers,
+  buildDisplay,
+  type ReasonInput,
+  type DisplayInput,
+} from './protection/customer-view';
+export {
+  learnedMultiplier,
+  applyLearning,
+  sessionSignalKeys,
+  MIN_OBSERVATIONS_TO_LEARN,
+  MAX_LEARNED_MULTIPLIER,
+  MIN_LEARNED_MULTIPLIER,
+  type SignalStat,
+} from './protection/learning';

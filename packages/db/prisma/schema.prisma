@@ -127,6 +127,19 @@ enum ApiKeyStatus {
   REVOKED
 }
 
+enum ProtectionVerdict {
+  PROCEED
+  WARN
+  HOLD
+}
+
+enum SessionOutcome {
+  SENT
+  ABANDONED
+  HELD
+  BLOCKED
+}
+
 enum TelecomCaseAssessment {
   SCAM
   LEGITIMATE
@@ -223,6 +236,7 @@ model Organization {
   apiKeys            ApiKey[]
   invitations        OrganizationInvitation[]
   telecomCaseFeedback TelecomCaseFeedback[]
+  protectionSessions  ProtectionSession[]
   auditEvents        AuditEvent[]
   outboxEvents       OutboxEvent[]
   idempotencyKeys    IdempotencyKey[]
@@ -479,6 +493,76 @@ model TelecomCaseFeedback {
   @@unique([organizationId, caseId])
   @@index([caseId])
   @@map("telecom_case_feedback")
+}
+
+
+/// One protection session: a payment paused at the bank's confirmation screen, what the engine
+/// advised, what the customer answered, and how it actually turned out.
+///
+/// This is the record the engine learns from. The answers and the final label
+/// (`confirmedScam`) are what turn a single interception into evidence about which signals and
+/// which answers really predict a scam.
+model ProtectionSession {
+  id             String @id
+  organizationId String
+  subjectRef     String
+
+  /// Reference the customer can quote to the bank, e.g. "AC-236".
+  caseReference String
+
+  amount   Decimal @db.Decimal(18, 2)
+  currency String  @db.Char(3)
+
+  verdict   ProtectionVerdict
+  riskScore Int
+  riskLevel String
+  /// Reason codes that fired, so learning can attribute outcomes to signals.
+  reasonCodes String[]
+
+  /// Questions asked and the options chosen, as [{questionId, optionId, signal}].
+  answers Json?
+
+  outcome       SessionOutcome?
+  /// Null while genuinely unknown. Only a real label teaches the engine anything.
+  confirmedScam Boolean?
+
+  correlationId String
+  source        String
+  schemaVersion Int      @default(1)
+  createdAt     DateTime @default(now())
+  resolvedAt    DateTime?
+  expiresAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([subjectRef])
+  @@index([caseReference])
+  @@map("protection_sessions")
+}
+
+/// What the engine has learned about one signal, accumulated across every resolved session.
+///
+/// `scamCount / observedCount` is the observed rate at which this signal accompanied a confirmed
+/// scam. The engine reads these to weight signals by evidence rather than by the constants it
+/// shipped with — so the network genuinely sharpens as it sees more cases.
+model SignalOutcomeStat {
+  id String @id
+
+  /// Scoped so one tenant's evidence never silently steers another's. Null = network-wide.
+  organizationId String?
+  /// A reason code ("NEW_PAYEE") or an answer key ("q_asked_to_pay:yes").
+  signalKey String
+
+  observedCount Int @default(0)
+  scamCount     Int @default(0)
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([organizationId, signalKey])
+  @@index([signalKey])
+  @@map("signal_outcome_stats")
 }
 
 // ---------------------------------------------------------------------------

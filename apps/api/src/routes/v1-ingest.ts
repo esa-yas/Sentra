@@ -4,6 +4,9 @@ import {
   assertNoForbiddenFields,
   bankOutcomeRequestSchema,
   caseFeedbackRequestSchema,
+  protectionSessionRequestSchema,
+  resolveSessionRequestSchema,
+  submitAnswersRequestSchema,
   paymentIntentRequestSchema,
   telecomRiskEventRequestSchema,
   type PartnerScope,
@@ -96,6 +99,44 @@ export const createPartnerIngestRouter = (container: Container): Router => {
     write(PARTNER_SCOPES.OUTCOMES_WRITE, async (req, context) => {
       const input = parseOrThrow(bankOutcomeRequestSchema, req.body ?? {});
       return container.partner!.ingest.submitOutcome(context, input);
+    }),
+  );
+
+  // Bank SDK: open a protection session at the transfer-confirmation screen. The response carries
+  // everything the screen renders — verdict, copy, and the questions worth asking.
+  router.post(
+    '/protection-sessions',
+    write(PARTNER_SCOPES.PAYMENT_INTENTS_WRITE, async (req, context) => {
+      const input = parseOrThrow(protectionSessionRequestSchema, req.body ?? {});
+      return container.partner!.protectionSessions.open(context, input) as Promise<
+        Record<string, unknown>
+      >;
+    }),
+  );
+
+  // The customer's answers come back for the engine — never the SDK — to interpret.
+  router.post(
+    '/protection-sessions/:sessionId/answers',
+    write(PARTNER_SCOPES.PAYMENT_INTENTS_WRITE, async (req, context) => {
+      const input = parseOrThrow(submitAnswersRequestSchema, req.body ?? {});
+      return container.partner!.protectionSessions.submitAnswers(
+        context,
+        req.params['sessionId'] as string,
+        input,
+      ) as Promise<Record<string, unknown>>;
+    }),
+  );
+
+  // How the payment actually ended. This is the only call that teaches the engine anything.
+  router.post(
+    '/protection-sessions/:sessionId/resolve',
+    write(PARTNER_SCOPES.OUTCOMES_WRITE, async (req, context) => {
+      const input = parseOrThrow(resolveSessionRequestSchema, req.body ?? {});
+      return container.partner!.protectionSessions.resolve(
+        context,
+        req.params['sessionId'] as string,
+        input,
+      ) as Promise<Record<string, unknown>>;
     }),
   );
 

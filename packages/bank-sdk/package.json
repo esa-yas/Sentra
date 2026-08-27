@@ -1,0 +1,14 @@
+{
+  "name": "@sentra/bank-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Client a bank embeds in its app to run a Sentra protection session at the transfer-confirmation screen.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@sentra/contracts": "workspace:*"
+  }
+}

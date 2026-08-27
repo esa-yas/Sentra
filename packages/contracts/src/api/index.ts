@@ -8,4 +8,5 @@ export * from './oauth';
 export * from './audit';
 export * from './retention';
 export * from './decision';
+export * from './protection-session';
 export * from './operations';

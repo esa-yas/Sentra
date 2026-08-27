@@ -110,3 +110,10 @@ export {
   type InvitationEmailInput,
   type WelcomeEmailInput,
 } from './email/templates';
+export {
+  PrismaProtectionSessionStore,
+  createPrismaProtectionSessionStore,
+  type CreateProtectionSessionInput,
+  type ProtectionSessionRow,
+  type StoredAnswer,
+} from './prisma/prisma-protection-session-store';

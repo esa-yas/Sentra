@@ -8,6 +8,7 @@
     { "path": "packages/core" },
     { "path": "packages/db" },
     { "path": "packages/adapters" },
+    { "path": "packages/bank-sdk" },
     { "path": "packages/testing" },
     { "path": "apps/api" },
     { "path": "apps/worker" }

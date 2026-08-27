@@ -104,6 +104,7 @@ Every response carries an \`x-correlation-id\` header — include it when you co
   security: [{ secretKey: [] }],
   tags: [
     { name: 'Banks', description: 'For banks and payment providers: evaluate payments, read recommendations, and record the final decision.' },
+    { name: 'Bank SDK', description: 'For the bank\'s app: run a protection session at the transfer-confirmation screen, ask the customer a question or two, and report how it ended.' },
     { name: 'Telecoms', description: 'For telecoms: share network risk signals and confirm whether the cases they touched were scams.' },
   ],
   paths: {
@@ -150,6 +151,109 @@ Every response carries an \`x-correlation-id\` header — include it when you co
           '400': { $ref: '#/components/responses/ValidationError' },
           '401': { $ref: '#/components/responses/Unauthorized' },
           '429': { $ref: '#/components/responses/RateLimited' },
+        },
+      },
+    },
+    '/v1/protection-sessions': {
+      post: {
+        tags: ['Bank SDK'],
+        summary: 'Open a protection session',
+        operationId: 'openProtectionSession',
+        description:
+          'Called by the Sentra SDK on the transfer-confirmation screen, before money moves. The response carries everything the screen renders — the verdict, the customer-facing copy, and the questions worth asking this particular customer — so the wording and thresholds improve for every bank without any of them shipping an app release. If Sentra cannot be reached, fail open and let the payment proceed: a scam check must never block a legitimate payment.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ProtectionSessionRequest' },
+              example: {
+                subjectRef: 'sbj_9f2c1a',
+                amount: 8400,
+                currency: 'GBP',
+                payeeLabel: 'J. Smith',
+                firstTimePayee: true,
+                onPhoneCall: true,
+                callerUnknown: true,
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'The verdict, what to show, and what to ask.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ProtectionSessionResponse' } } },
+          },
+          '400': { $ref: '#/components/responses/ValidationError' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '429': { $ref: '#/components/responses/RateLimited' },
+        },
+      },
+    },
+    '/v1/protection-sessions/{sessionId}/answers': {
+      post: {
+        tags: ['Bank SDK'],
+        summary: 'Submit the customer’s answers',
+        operationId: 'submitProtectionAnswers',
+        description:
+          'Send back the options the customer chose. The SDK never interprets an answer — the engine decides what each one means, so the meaning can be retuned server-side. The response is a revised verdict and revised copy.',
+        parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['answers'],
+                properties: {
+                  answers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: { questionId: { type: 'string' }, optionId: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+              example: { answers: [{ questionId: 'asked_to_pay', optionId: 'yes' }] },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'The revised verdict, copy, and where to route a hold.' },
+          '400': { $ref: '#/components/responses/ValidationError' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
+        },
+      },
+    },
+    '/v1/protection-sessions/{sessionId}/resolve': {
+      post: {
+        tags: ['Bank SDK'],
+        summary: 'Report how the payment ended',
+        operationId: 'resolveProtectionSession',
+        description:
+          'Always call this. It is the only moment the engine receives a fact rather than an inference, and therefore the only moment it learns: the signals on the session are credited against the outcome, so signals that keep accompanying confirmed scams count for more next time. Omit `confirmedScam` while it is genuinely unknown — a guess teaches the wrong thing.',
+        parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['outcome'],
+                properties: {
+                  outcome: { type: 'string', enum: ['SENT', 'ABANDONED', 'HELD', 'BLOCKED'] },
+                  confirmedScam: { type: 'boolean', description: 'Once known. Omit while unknown.' },
+                },
+              },
+              example: { outcome: 'ABANDONED', confirmedScam: true },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Recorded.' },
+          '401': { $ref: '#/components/responses/Unauthorized' },
+          '404': { $ref: '#/components/responses/NotFound' },
         },
       },
     },
@@ -375,6 +479,73 @@ Every response carries an \`x-correlation-id\` header — include it when you co
           authorityNote: { type: 'string', example: 'Advisory only — the bank makes the final decision.' },
           processingTimeMs: { type: 'number', example: 42 },
           evaluatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ProtectionSessionRequest: {
+        type: 'object',
+        required: ['subjectRef', 'amount'],
+        description: 'The payment as the customer is about to confirm it. Risk-relevant fields only — never card or account numbers.',
+        properties: {
+          subjectRef: { type: 'string', description: 'Shared pseudonymous customer reference; the join with any telecom signal.', example: 'sbj_9f2c1a' },
+          amount: { type: 'number', minimum: 0, example: 8400 },
+          currency: { type: 'string', minLength: 3, maxLength: 3, default: 'GBP' },
+          payeeLabel: { type: 'string', description: 'Display name only, so the warning can say who the money is going to.', example: 'J. Smith' },
+          firstTimePayee: { type: 'boolean', default: false },
+          payeeAgeDays: { type: 'integer', minimum: 0, default: 0 },
+          paymentVelocity24h: { type: 'integer', minimum: 0, default: 0 },
+          onPhoneCall: { type: 'boolean', default: false, description: 'The device reports an active call — the strongest live signal there is.' },
+          callerUnknown: { type: 'boolean', default: false, description: 'That call is with a number not in the customer’s contacts.' },
+          deviceChange: { type: 'boolean', default: false },
+          previousWarnings: { type: 'integer', minimum: 0, default: 0 },
+        },
+      },
+      ProtectionSessionResponse: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string' },
+          verdict: { type: 'string', enum: ['PROCEED', 'WARN', 'HOLD'], example: 'HOLD' },
+          riskLevel: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+          riskScore: { type: 'integer', minimum: 0, maximum: 100, description: 'Shown to the bank, never to the customer.' },
+          display: { $ref: '#/components/schemas/CustomerDisplay' },
+          questions: { type: 'array', items: { $ref: '#/components/schemas/PollQuestion' } },
+          caseReference: { type: 'string', description: 'Short reference the customer can quote to the bank.', example: 'AC-02361' },
+          correlationId: { type: 'string' },
+        },
+      },
+      CustomerDisplay: {
+        type: 'object',
+        description: 'Everything the screen renders. Owned by the engine so the wording improves for every bank at once.',
+        properties: {
+          tone: { type: 'string', enum: ['INFO', 'CAUTION', 'STOP'], example: 'STOP' },
+          headline: { type: 'string', example: 'Stop — this looks like a scam' },
+          body: { type: 'string' },
+          reasons: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'RECENT_SUSPICIOUS_CALL' },
+                title: { type: 'string', example: 'A suspicious call is happening right now' },
+                detail: { type: 'string' },
+              },
+            },
+          },
+          continueLabel: { type: 'string', description: 'Absent when the advice is to hold — there is no “send anyway”.' },
+          cancelLabel: { type: 'string', example: 'Cancel this payment' },
+          footnote: { type: 'string' },
+        },
+      },
+      PollQuestion: {
+        type: 'object',
+        description: 'A question chosen from the reasons that actually fired. At most three are ever returned.',
+        properties: {
+          id: { type: 'string', example: 'asked_to_pay' },
+          prompt: { type: 'string', example: 'Did someone contact you and ask you to make this payment?' },
+          helper: { type: 'string' },
+          options: {
+            type: 'array',
+            items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' } } },
+          },
         },
       },
       TelecomRiskEvent: {
