@@ -27,3 +27,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .next-verify/
+
+# Flutter app build output and generated platform folders
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+apps/mobile/ios/Flutter/ephemeral/
+apps/mobile/**/Pods/

@@ -124,7 +124,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(^|/)(dist|coverage|\\.next|\\.next-verify)/|(^|/)next-env\\.d\\.ts$' },
+    exclude: { path: '^apps/mobile/|(^|/)(dist|coverage|\\.next|\\.next-verify)/|(^|/)next-env\\.d\\.ts$' },
     tsPreCompilationDeps: true,
     // Resolves `@sentra/*` to source rather than to built output, so the rules apply to a
     // clean checkout. See the comment in that file for why it is separate from the build.

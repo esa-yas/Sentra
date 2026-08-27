@@ -10,6 +10,8 @@ export default tseslint.config(
       // build cannot disturb a running dev server's `.next`.
       '**/.next-verify/**',
       '**/coverage/**',
+      // Flutter app — Dart, linted by `flutter analyze`, not ESLint.
+      'apps/mobile/**',
       '**/node_modules/**',
       // Ephemeral agent worktrees hold full repo copies whose nested paths defeat the
       // package-scoped rule overrides below; they are never part of the linted source.
