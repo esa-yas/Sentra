@@ -1,0 +1,27 @@
+# The bank app is a vendored open-source template (Martin Yovo's Flutter banking app), migrated
+# to Dart 3 and wired to Sentra. Its icon-font constants and original style predate our lints, so
+# the analyzer is scoped to catch real problems in the code we changed without drowning in the
+# template's inherited style. Errors are never suppressed.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - lib/utils/iconly/**   # generated icon-font constants (hundreds of names)
+    - lib/generated/**      # generated asset references
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+  errors:
+    # Inherited from the upstream template; not worth churning vendored code over.
+    constant_identifier_names: ignore
+    deprecated_member_use: info
+    use_super_parameters: ignore
+    library_private_types_in_public_api: ignore
+
+linter:
+  rules:
+    sort_child_properties_last: false

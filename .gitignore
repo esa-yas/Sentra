@@ -35,3 +35,8 @@ apps/mobile/.flutter-plugins*
 apps/mobile/ios/Flutter/ephemeral/
 apps/mobile/**/Pods/
 apps/mobile/env.json
+apps/bank-demo/build/
+apps/bank-demo/.dart_tool/
+apps/bank-demo/ios/Pods/
+apps/bank-demo/ios/Flutter/ephemeral/
+packages/sentra_sdk/.dart_tool/
