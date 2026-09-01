@@ -42,3 +42,33 @@ Regenerate it any time with the mint step in `scripts` (see commit message) if t
 
 Behind the scenes, the API recorded both sessions; the held one taught the engine a confirmed
 scam. That data is queryable in the Sentra console.
+
+---
+
+## Connecting the account (the real handoff)
+
+Both apps installed on the same iPhone. Sentra opens the bank to authorise — Sentra never sees a
+banking credential.
+
+1. **Sentra app** → sign in → **Connect your bank** → tap **Sandbox Bank**.
+2. Sentra deep-links into the **bank app**, which shows *"Connect Sentra to your account?"* with
+   exactly what Sentra can and can't see, and **Connect with Face ID** / **Cancel**.
+3. Approve with **Face ID**. The bank redirects back to Sentra (`sentra://bank-callback?code=…`)
+   and Sentra finishes linking.
+4. In the **bank app → Profile**, the account now shows **"Protected by Sentra"** (with a
+   Disconnect option). From here the transfer demo above runs with protection live.
+
+Run both, pointing the bank at this Mac so the phone reaches the API:
+
+```bash
+# Sentra app
+cd apps/mobile && flutter run -d 00008130-001238200CC3001C \
+  --dart-define=SENTRA_API_URL=http://192.168.8.84:3001
+
+# Bank app (second terminal)
+cd apps/bank-demo && flutter run -d 00008130-001238200CC3001C \
+  --dart-define=SENTRA_API_URL=http://192.168.8.84:3001
+```
+
+Developer docs for the SDK and this connection flow are on the console at **/docs**
+(*Mobile SDK* and *Connecting a customer's account*).

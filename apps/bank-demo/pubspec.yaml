@@ -21,6 +21,10 @@ dependencies:
   # Real scam protection at the transfer screen.
   sentra_sdk:
     path: ../../packages/sentra_sdk
+  # The bank's own auth for the connect step, and the deep link Sentra opens it with.
+  local_auth: ^2.3.0
+  app_links: ^6.3.2
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

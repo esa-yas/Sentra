@@ -1,15 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:sentra_bank_demo/generated/assets.dart';
 import 'package:sentra_bank_demo/json/shortcut_list.dart';
 import 'package:sentra_bank_demo/repo/repository.dart';
 import 'package:sentra_bank_demo/widgets/custom_list_tile.dart';
 import 'package:sentra_bank_demo/utils/iconly/iconly_bold.dart';
-import 'package:sentra_bank_demo/utils/styles.dart';
-import 'package:sentra_bank_demo/view_models/view_models.dart';
 import 'package:sentra_bank_demo/widgets/my_app_bar.dart';
+import 'package:sentra_bank_demo/widgets/sentra_connection_card.dart';
 import 'package:gap/gap.dart';
-import 'package:provider/provider.dart';
 
 class Profile extends StatelessWidget {
   const Profile({Key? key}) : super(key: key);
@@ -85,7 +82,9 @@ class Profile extends StatelessWidget {
               )
             ],
           ),
-          const Gap(35),
+          const Gap(28),
+          const SentraConnectionCard(),
+          const Gap(20),
           CustomListTile(
               icon: IconlyBold.Profile,
               color: const Color(0xFFC76CD9),

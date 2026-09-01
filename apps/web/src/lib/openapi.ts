@@ -40,6 +40,71 @@ case id, the decision, and the classification, so the telecom can confirm whethe
 
 ---
 
+## Mobile SDK (Flutter)
+
+A bank with its own app embeds the Sentra SDK and gets scam protection at the moment of a
+transfer with **one call** — no scam logic, no copy, no screens to build. The engine returns
+the verdict, the wording and the questions; the SDK renders them.
+
+**Install:**
+
+\`\`\`yaml
+dependencies:
+  sentra_sdk: ^0.1.0
+\`\`\`
+
+**Initialise once** with the secret key your organization minted in the console:
+
+\`\`\`dart
+final client = SentraClient(
+  apiBaseUrl: 'https://api.sentra.example',
+  secretKey: 'sk_test_…', // sk_live_… once approved
+);
+\`\`\`
+
+**Protect a payment** — call this the instant the customer confirms a transfer, before you move
+the money:
+
+\`\`\`dart
+final result = await SentraGuard(client: client).protectPayment(
+  context,
+  subjectRef: customerRef,   // a stable pseudonym, never an account number
+  amount: amount,
+  currency: 'USD',
+  payeeLabel: payee.displayName,
+  firstTimePayee: payee.isNew,
+  onPhoneCall: device.isOnACall,
+  callerUnknown: !device.callerInContacts,
+);
+
+if (result.allowed) {
+  await bank.transfer(...);   // nothing wrong, or the customer chose to send
+} else {
+  // result.outcome is cancelled or held; the money stays put.
+  showHeld(result.caseReference);
+}
+\`\`\`
+
+Under the hood the SDK runs three calls — **open** the session, **submit** the customer's
+answers, **resolve** the outcome — documented under the *Bank SDK* tag below. If Sentra can't be
+reached the SDK **fails open** (the payment proceeds), because a scam-check outage must never
+lock a customer out of their own bank.
+
+## Connecting a customer's account
+
+Protection turns on when a customer links their bank inside the **Sentra app** — an OAuth-style,
+redirect-based handoff in which Sentra never sees a banking credential:
+
+1. In the Sentra app the customer picks their bank. Sentra opens the **bank's own** authorization
+   screen (a deep link, or a hosted page) with a redirect URI and state.
+2. The bank shows what Sentra will and won't be able to see, and the customer approves **in the
+   bank**, with whatever it uses for a sensitive action (biometrics, passcode).
+3. The bank redirects back to Sentra with a one-time **code**; Sentra exchanges it
+   server-to-server for the credentials it uses to open protection sessions.
+4. The bank stores that the account is linked and shows "Protected by Sentra" in its settings.
+
+A reference implementation of both sides ships in the Sentra demo apps.
+
 ## Quickstart
 
 1. **Create an account.** Sign up at the [console](/signup). Your organization starts in **sandbox**.
@@ -154,7 +219,7 @@ Every response carries an \`x-correlation-id\` header — include it when you co
         },
       },
     },
-    '/v1/protection-sessions': {
+    '/v1/sdk/protection-sessions': {
       post: {
         tags: ['Bank SDK'],
         summary: 'Open a protection session',
@@ -189,7 +254,7 @@ Every response carries an \`x-correlation-id\` header — include it when you co
         },
       },
     },
-    '/v1/protection-sessions/{sessionId}/answers': {
+    '/v1/sdk/protection-sessions/{sessionId}/answers': {
       post: {
         tags: ['Bank SDK'],
         summary: 'Submit the customer’s answers',
@@ -226,7 +291,7 @@ Every response carries an \`x-correlation-id\` header — include it when you co
         },
       },
     },
-    '/v1/protection-sessions/{sessionId}/resolve': {
+    '/v1/sdk/protection-sessions/{sessionId}/resolve': {
       post: {
         tags: ['Bank SDK'],
         summary: 'Report how the payment ended',

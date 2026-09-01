@@ -38,7 +38,7 @@ class BankRegistry {
 
   static const String _sandboxUrl = String.fromEnvironment(
     'SENTRA_BANK_SANDBOX_URL',
-    defaultValue: 'http://localhost:4000/oauth/authorize',
+    defaultValue: 'sentrabank://authorize',
   );
 
   static const List<Bank> banks = [
