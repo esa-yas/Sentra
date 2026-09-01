@@ -49,7 +49,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (!mounted) return;
       // When the project requires email confirmation there is no session yet, so the screen has
       // to say so rather than silently doing nothing.
-      if (needsConfirmation) setState(() => _sentTo = _email.text.trim());
+      if (needsConfirmation) {
+        setState(() => _sentTo = _email.text.trim());
+        return;
+      }
+      // Otherwise there *is* a session now. This screen was pushed on top of the root, so the
+      // root swapping underneath is invisible until the route is cleared away.
+      Navigator.of(context).popUntil((r) => r.isFirst);
     } on AuthFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'services/bootstrap.dart';
+
 import 'screens/auth/sign_in_screen.dart';
 import 'screens/home/shell.dart';
 import 'screens/onboarding/connect_bank_screen.dart';
@@ -28,18 +30,9 @@ class AppScope extends InheritedNotifier<AppState> {
 /// app in a hospital waiting room at night should be able to force dark without changing their
 /// whole phone.
 class ThemeController extends ValueNotifier<ThemeMode> {
-  ThemeController() : super(ThemeMode.system);
+  ThemeController(super.initial);
 
   static const _key = 'sentra.theme_mode';
-
-  Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    value = switch (prefs.getString(_key)) {
-      'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
-    };
-  }
 
   Future<void> set(ThemeMode mode) async {
     value = mode;
@@ -49,7 +42,9 @@ class ThemeController extends ValueNotifier<ThemeMode> {
 }
 
 class SentraApp extends StatefulWidget {
-  const SentraApp({super.key});
+  const SentraApp({super.key, required this.boot});
+
+  final Bootstrap boot;
 
   static ThemeController themeOf(BuildContext context) =>
       context.findAncestorStateOfType<_SentraAppState>()!._theme;
@@ -60,12 +55,11 @@ class SentraApp extends StatefulWidget {
 
 class _SentraAppState extends State<SentraApp> {
   final AppState _state = AppState();
-  final ThemeController _theme = ThemeController();
+  late final ThemeController _theme = ThemeController(widget.boot.themeMode);
 
   @override
   void initState() {
     super.initState();
-    _theme.load();
     // Start listening before any bank redirect can arrive.
     BankLink.instance.start();
   }
@@ -91,7 +85,7 @@ class _SentraAppState extends State<SentraApp> {
           theme: sentraLightTheme(),
           darkTheme: sentraDarkTheme(),
           themeMode: mode,
-          home: const _Root(),
+          home: _Root(boot: widget.boot),
         ),
       ),
     );
@@ -100,38 +94,19 @@ class _SentraAppState extends State<SentraApp> {
 
 /// Sends the person to the right place: sign in, the one-time tour, connect a bank, or the app.
 class _Root extends StatefulWidget {
-  const _Root();
+  const _Root({required this.boot});
+
+  final Bootstrap boot;
 
   @override
   State<_Root> createState() => _RootState();
 }
 
 class _RootState extends State<_Root> {
-  bool _checking = true;
-  bool _onboarded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _bootstrap();
-  }
-
-  Future<void> _bootstrap() async {
-    await AuthSession.restore();
-    final seen = await OnboardingScreen.hasSeen();
-    if (!mounted) return;
-    setState(() {
-      _onboarded = seen;
-      _checking = false;
-    });
-  }
+  late bool _onboarded = widget.boot.onboarded;
 
   @override
   Widget build(BuildContext context) {
-    if (_checking) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
     return ValueListenableBuilder<bool>(
       valueListenable: AuthSession.signedIn,
       builder: (context, signedIn, _) {

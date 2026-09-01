@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -61,59 +63,73 @@ class AuthService {
     required String email,
     required String password,
     required String fullName,
-  }) async {
-    _requireConfigured();
-    try {
-      await _auth.signUp(
-        email: email.trim(),
-        password: password,
-        data: {'full_name': fullName.trim()},
-      );
-    } on AuthException catch (e) {
-      throw _translate(e);
-    }
-  }
+  }) =>
+      _guard(() => _auth.signUp(
+            email: email.trim(),
+            password: password,
+            data: {'full_name': fullName.trim()},
+          ));
 
-  Future<void> signIn({required String email, required String password}) async {
-    _requireConfigured();
-    try {
-      await _auth.signInWithPassword(email: email.trim(), password: password);
-    } on AuthException catch (e) {
-      throw _translate(e);
-    }
-  }
+  Future<void> signIn({required String email, required String password}) =>
+      _guard(() => _auth.signInWithPassword(email: email.trim(), password: password));
 
   /// Sends the code used by the reset flow.
-  Future<void> sendResetCode(String email) async {
-    _requireConfigured();
-    try {
-      await _auth.resetPasswordForEmail(email.trim());
-    } on AuthException catch (e) {
-      throw _translate(e);
-    }
-  }
+  Future<void> sendResetCode(String email) =>
+      _guard(() => _auth.resetPasswordForEmail(email.trim()));
 
   /// Exchanges the emailed code for a session, so a new password can be set.
-  Future<void> verifyResetCode({required String email, required String code}) async {
+  Future<void> verifyResetCode({required String email, required String code}) => _guard(
+        () => _auth.verifyOTP(
+          email: email.trim(),
+          token: code.trim(),
+          type: OtpType.recovery,
+        ),
+      );
+
+  Future<void> updatePassword(String password) =>
+      _guard(() => _auth.updateUser(UserAttributes(password: password)));
+
+  /// Runs one auth call, turning *every* failure into an [AuthFailure].
+  ///
+  /// Catching only [AuthException] left network faults — an unreachable project, no signal, a
+  /// captive portal — escaping as unhandled errors, which meant the form simply never came back.
+  /// Silence is the worst possible answer at a sign-in screen, so nothing is allowed through.
+  Future<void> _guard(Future<Object?> Function() operation) async {
     _requireConfigured();
     try {
-      await _auth.verifyOTP(
-        email: email.trim(),
-        token: code.trim(),
-        type: OtpType.recovery,
-      );
+      await operation().timeout(const Duration(seconds: 20));
     } on AuthException catch (e) {
       throw _translate(e);
+    } on TimeoutException {
+      throw const AuthFailure(
+        'That took too long. Check your connection and try again.',
+      );
+    } catch (e) {
+      throw _networkFailure(e);
     }
   }
 
-  Future<void> updatePassword(String password) async {
-    _requireConfigured();
-    try {
-      await _auth.updateUser(UserAttributes(password: password));
-    } on AuthException catch (e) {
-      throw _translate(e);
+  /// Names the specific network fault when it can, because "something went wrong" sends people
+  /// hunting through their own password rather than their signal.
+  AuthFailure _networkFailure(Object error) {
+    final text = error.toString().toLowerCase();
+    if (text.contains('failed host lookup') ||
+        text.contains('nodename nor servname') ||
+        text.contains('enotfound')) {
+      return const AuthFailure(
+        'We can’t reach Sentra’s servers. This build points at a project that no longer exists — '
+        'that’s our setup, not your details.',
+        isConfiguration: true,
+      );
     }
+    if (text.contains('socketexception') ||
+        text.contains('connection') ||
+        text.contains('network')) {
+      return const AuthFailure(
+        'No connection to Sentra. Check your internet and try again.',
+      );
+    }
+    return AuthFailure('Something went wrong signing you in. $error');
   }
 
   Future<void> signOut() async {
