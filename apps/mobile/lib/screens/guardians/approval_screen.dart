@@ -7,17 +7,14 @@ import '../../models/models.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/common.dart';
 
-/// The guardian's decision.
+/// A guardian deciding on a held payment.
 ///
-/// A guardian approving a payment is telling the bank it is safe to send, so the screen makes the
-/// weight of that explicit: they must confirm they have actually spoken to the person, and they
-/// are told plainly that an approved payment which turns out to be a scam can be investigated.
-/// That is not there to frighten anyone — it is there because a guardian can be socially
-/// engineered too, and naming the consequence is what makes the moment feel real.
-///
-/// Refusing is the low-friction path; approving is the one that requires a deliberate step.
+/// The weight of the decision is stated plainly rather than buried: approving tells the bank it
+/// is safe to send. So "approve" stays disabled until they confirm they actually spoke to the
+/// person, while refusing is always one tap — the safe action must never be the harder one.
 class ApprovalScreen extends StatefulWidget {
   const ApprovalScreen({super.key, required this.request});
+
   final GuardianRequest request;
 
   @override
@@ -25,16 +22,16 @@ class ApprovalScreen extends StatefulWidget {
 }
 
 class _ApprovalScreenState extends State<ApprovalScreen> {
+  bool _spoke = false;
   Timer? _ticker;
-  bool _confirmedSpoke = false;
+  late Duration _left = widget.request.timeLeft;
 
   @override
   void initState() {
     super.initState();
-    // The countdown is the point: a guardian who cannot answer in time must not become the
-    // reason a payment is stuck, so the hold escalates to the bank on its own.
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() => _left = widget.request.timeLeft);
     });
   }
 
@@ -44,212 +41,183 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     super.dispose();
   }
 
-  String get _timeLeft {
-    final left = widget.request.timeLeft;
-    final minutes = left.inMinutes.toString().padLeft(2, '0');
-    final seconds = (left.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  void _decide({required bool approved}) {
+  void _resolve({required bool approved}) {
     AppScope.of(context).resolveRequest(approved: approved);
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          approved
-              ? 'Approved. ${widget.request.forPersonName}’s bank has been told.'
-              : 'Kept on hold. Their bank will review it.',
-        ),
+        content: Text(approved
+            ? 'Approved. Your bank has been told it can send.'
+            : 'Kept held. Your bank will look at it.'),
       ),
     );
   }
 
+  String get _countdown {
+    final m = _left.inMinutes.toString().padLeft(2, '0');
+    final s = (_left.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final request = widget.request;
+    final p = SentraPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final expired = request.timeLeft == Duration.zero;
+    final r = widget.request;
+    final expired = _left == Duration.zero;
 
     return Scaffold(
-      appBar: AppBar(title: Text('${request.forPersonName} needs you')),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.lg),
-                children: [
-                  Text(
-                    'A payment was held because it looked like a scam. Only approve it if you have '
-                    'spoken to ${request.forPersonName} and you are sure.',
-                    style: text.bodyLarge,
+      appBar: AppBar(title: Text('${r.forPersonName} needs you')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.lg),
+              children: [
+                Text(
+                  'A payment was held because it looks like a scam. Only approve it if you have '
+                  'spoken to ${r.forPersonName} and you are sure.',
+                  style: text.bodyLarge,
+                ),
+                const VGap.xl(),
+                SentraCard(
+                  color: p.stopBg,
+                  borderColor: p.stopLine,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('HELD PAYMENT',
+                          style: text.labelSmall?.copyWith(color: p.stop)),
+                      const VGap.sm(),
+                      Text(formatMoney(r.amount, r.currency),
+                          style: text.displaySmall?.copyWith(fontSize: 34, color: p.stop)),
+                      const SizedBox(height: 2),
+                      Text('to ${r.payeeLabel}',
+                          style: text.bodyMedium?.copyWith(color: p.stop)),
+                      const VGap.md(),
+                      Text('Ref ${r.caseReference}',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: p.stop.withValues(alpha: 0.8))),
+                    ],
                   ),
-                  const VGap.lg(),
-
-                  // The payment itself.
-                  SentraCard(
-                    color: SentraColors.stopBg,
-                    borderColor: SentraColors.stopLine,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SectionLabel('Held payment'),
-                        const SizedBox(height: 6),
-                        Text(
-                          formatMoney(request.amount, request.currency),
-                          style: text.displaySmall?.copyWith(fontSize: 34),
-                        ),
-                        const SizedBox(height: 2),
-                        Text('to ${request.payeeLabel}',
-                            style: text.bodyLarge?.copyWith(color: const Color(0xFF8A4A44))),
-                        const VGap.md(),
-                        Text('Ref ${request.caseReference}',
-                            style: text.bodySmall?.copyWith(fontSize: 12.5)),
-                      ],
-                    ),
-                  ),
-                  const VGap.lg(),
-
-                  const SectionLabel('Why it was held'),
-                  const VGap.md(),
-                  SentraCard(
-                    padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.xs),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < request.reasons.length; i++)
-                          Column(
+                ),
+                const VGap.xl(),
+                const SectionLabel('Why it was held'),
+                const VGap.md(),
+                SentraCard(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < r.reasons.length; i++) ...[
+                        if (i > 0) Divider(color: p.line, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: Gap.md),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (i > 0) const Divider(height: 1),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: Gap.md),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Padding(
-                                      padding: EdgeInsets.only(top: 4),
-                                      child: Icon(Icons.circle,
-                                          size: 8, color: SentraColors.stop),
-                                    ),
-                                    const SizedBox(width: Gap.md),
-                                    Expanded(
-                                      child: Text(request.reasons[i], style: text.bodyLarge),
-                                    ),
-                                  ],
-                                ),
+                              Container(
+                                width: 7,
+                                height: 7,
+                                margin: const EdgeInsets.only(top: 7, right: Gap.md),
+                                decoration:
+                                    BoxDecoration(color: p.stop, shape: BoxShape.circle),
                               ),
+                              Expanded(
+                                  child: Text(r.reasons[i], style: text.bodyLarge)),
                             ],
                           ),
-                      ],
-                    ),
-                  ),
-                  const VGap.lg(),
-
-                  // The responsibility. Stated plainly, before the approve control is usable.
-                  const Notice(
-                    severity: Severity.caution,
-                    title: 'This is a real responsibility',
-                    child: Text(
-                      'Approving tells the bank it is safe to send. If a payment you approve turns '
-                      'out to be a scam, the case can be investigated by the bank, by Sentra, or by '
-                      'the authorities.',
-                    ),
-                  ),
-                  const VGap.lg(),
-
-                  SentraCard(
-                    onTap: expired
-                        ? null
-                        : () => setState(() => _confirmedSpoke = !_confirmedSpoke),
-                    borderColor: _confirmedSpoke ? SentraColors.accent : null,
-                    color: _confirmedSpoke ? SentraColors.accentSoft : null,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          _confirmedSpoke
-                              ? Icons.check_box_rounded
-                              : Icons.check_box_outline_blank_rounded,
-                          color: _confirmedSpoke
-                              ? SentraColors.accent
-                              : SentraColors.lineStrong,
-                          size: 26,
-                        ),
-                        const SizedBox(width: Gap.md),
-                        Expanded(
-                          child: Text(
-                            'I have spoken to ${request.forPersonName} and I am sure this payment '
-                            'is genuine.',
-                            style: text.bodyLarge?.copyWith(
-                              color: SentraColors.ink,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const VGap.lg(),
+                const Notice(
+                  severity: Severity.caution,
+                  title: 'This is a real responsibility',
+                  child: Text(
+                    'Approving tells the bank it is safe to send. If a payment you approve turns '
+                    'out to be a scam, the case can be investigated by the bank, by Sentra, or by '
+                    'the authorities.',
+                  ),
+                ),
+                const VGap.lg(),
+                SentraCard(
+                  onTap: expired ? null : () => setState(() => _spoke = !_spoke),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: Checkbox(
+                          value: _spoke,
+                          onChanged:
+                              expired ? null : (v) => setState(() => _spoke = v ?? false),
+                        ),
+                      ),
+                      const SizedBox(width: Gap.md),
+                      Expanded(
+                        child: Text(
+                          'I have spoken to ${r.forPersonName} and I am sure this is genuine.',
+                          style: text.bodyLarge,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-
-            // Footer: the countdown and the two decisions.
-            Container(
-              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.lg),
-              decoration: const BoxDecoration(
-                color: SentraColors.card,
-                border: Border(top: BorderSide(color: SentraColors.line)),
-              ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
+            decoration: BoxDecoration(
+              color: p.surface,
+              border: Border(top: BorderSide(color: p.line)),
+            ),
+            child: SafeArea(
+              top: false,
               child: Column(
                 children: [
-                  if (expired)
-                    const Notice(
-                      severity: Severity.neutral,
-                      child: Text(
-                        'Time is up — this has gone to the bank to review. Nothing has been sent.',
-                      ),
-                    )
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.timer_outlined,
-                            size: 17, color: SentraColors.muted),
-                        const SizedBox(width: 6),
-                        Text('Time to decide  ', style: text.bodySmall),
-                        Text(
-                          _timeLeft,
-                          style: const TextStyle(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.timer_outlined, size: 16, color: p.muted),
+                      const SizedBox(width: 6),
+                      Text('Time to decide  ', style: text.bodySmall),
+                      Text(expired ? 'expired' : _countdown,
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: SentraColors.stop,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
-                    ),
-                  const VGap.md(),
-                  OutlinedButton(
-                    onPressed: expired ? null : () => _decide(approved: false),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: SentraColors.stop,
-                      side: const BorderSide(color: SentraColors.stopLine, width: 1.5),
-                    ),
-                    child: const Text('This looks wrong — keep it held'),
+                            fontSize: 14,
+                            color: expired ? p.muted : p.stop,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          )),
+                    ],
                   ),
                   const VGap.md(),
-                  FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: SentraColors.safe),
-                    onPressed:
-                        _confirmedSpoke && !expired ? () => _decide(approved: true) : null,
-                    child: const Text('Approve this payment'),
+                  OutlinedButton.icon(
+                    onPressed: () => _resolve(approved: false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: p.stop,
+                      side: BorderSide(color: p.stopLine, width: 1.6),
+                    ),
+                    icon: const Icon(Icons.pan_tool_rounded, size: 18),
+                    label: const Text('This looks wrong — keep it held'),
+                  ),
+                  const VGap.sm(),
+                  FilledButton.icon(
+                    onPressed: (_spoke && !expired) ? () => _resolve(approved: true) : null,
+                    style: FilledButton.styleFrom(
+                        backgroundColor: p.safe, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.check_rounded, size: 19),
+                    label: const Text('Approve this payment'),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -34,3 +34,4 @@ apps/mobile/build/
 apps/mobile/.flutter-plugins*
 apps/mobile/ios/Flutter/ephemeral/
 apps/mobile/**/Pods/
+apps/mobile/env.json

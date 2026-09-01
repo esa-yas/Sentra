@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import 'auth_service.dart';
 import 'demo_data.dart';
 import 'sentra_api.dart';
 
@@ -16,10 +17,10 @@ class AppState extends ChangeNotifier {
 
   final SentraApi api;
 
-  bool signedIn = false;
   bool bankConnected = false;
-  String personName = DemoData.personName;
-  String email = '';
+
+  /// Which bank the customer linked, so the app can name it back to them.
+  String? bankId;
   String subjectRef = DemoData.subjectRef;
 
   List<ActivityEntry> activity = [];
@@ -32,15 +33,17 @@ class AppState extends ChangeNotifier {
 
   int get threatsStopped => activity.where((a) => a.kind == ActivityKind.held).length;
 
-  /// Signs in and loads the account. Demo mode seeds a realistic one.
-  Future<void> signIn({required String email, required String name}) async {
-    this.email = email;
-    personName = name.isEmpty ? DemoData.personName : name.split(' ').first;
-    signedIn = true;
-    notifyListeners();
+  /// The first name to greet the person by, taken from the real session when there is one.
+  String get personName {
+    final full = AuthSession.displayName;
+    return full.trim().isEmpty ? DemoData.personName : full.trim().split(' ').first;
   }
 
-  void connectBank() {
+  String get email => AuthSession.email;
+
+  /// Called once the bank has redirected back and the link is established.
+  void connectBank({String? bankId}) {
+    this.bankId = bankId;
     bankConnected = true;
     activity = DemoData.activity();
     guardians = DemoData.guardians();
@@ -49,9 +52,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void signOut() {
-    signedIn = false;
+  Future<void> signOut() async {
+    await AuthSession.signOut();
     bankConnected = false;
+    bankId = null;
     activity = [];
     guardians = [];
     protecting = [];

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sentra_app/app.dart';
 import 'package:sentra_app/models/models.dart';
+import 'package:sentra_app/screens/auth/sign_in_screen.dart';
 import 'package:sentra_app/screens/guardians/approval_screen.dart';
 import 'package:sentra_app/screens/intervention/intervention_screen.dart';
 import 'package:sentra_app/services/app_state.dart';
@@ -9,9 +10,14 @@ import 'package:sentra_app/services/demo_data.dart';
 import 'package:sentra_app/theme/theme.dart';
 
 /// Wraps a screen with the app's theme and state, the way the real app does.
-Widget host(Widget child, {AppState? state}) => AppScope(
+Widget host(Widget child, {AppState? state, ThemeMode mode = ThemeMode.light}) => AppScope(
       state: state ?? AppState(),
-      child: MaterialApp(theme: buildSentraTheme(), home: child),
+      child: MaterialApp(
+        theme: sentraLightTheme(),
+        darkTheme: sentraDarkTheme(),
+        themeMode: mode,
+        home: child,
+      ),
     );
 
 /// Gives the test a tall phone-sized surface.
@@ -50,30 +56,29 @@ Future<void> answerQuestion(WidgetTester tester, int index, String label) async 
 
 void main() {
   group('sign in', () {
-    testWidgets('starts at sign-in and refuses a short password', (tester) async {
+    testWidgets('refuses a malformed email and an empty password', (tester) async {
       useTallPhone(tester);
-      await tester.pumpWidget(const SentraApp());
-      expect(find.text('Keep your money safe'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextFormField).at(0), 'Ada Lovelace');
-      await tester.enterText(find.byType(TextFormField).at(1), 'ada@example.com');
-      await tester.enterText(find.byType(TextFormField).at(2), 'short');
-      await tester.tap(find.text('Create account'));
-      await tester.pump();
-
-      expect(find.text('Use at least 8 characters'), findsOneWidget);
-    });
-
-    testWidgets('a valid sign-up moves on to connecting a bank', (tester) async {
-      useTallPhone(tester);
-      await tester.pumpWidget(const SentraApp());
-      await tester.enterText(find.byType(TextFormField).at(0), 'Ada Lovelace');
-      await tester.enterText(find.byType(TextFormField).at(1), 'ada@example.com');
-      await tester.enterText(find.byType(TextFormField).at(2), 'a-good-password');
-      await tester.tap(find.text('Create account'));
+      await tester.pumpWidget(host(const SignInScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Connect your bank'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, 'not-an-email');
+      await tester.tap(find.text('Sign in'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('That doesn\u2019t look like an email address'), findsOneWidget);
+      expect(find.text('Enter your password'), findsOneWidget);
+    });
+
+    // The safer wording: never reveal which half was wrong, so the form can't be used to
+    // discover whether an address has an account here.
+    testWidgets('offers a way to sign up and to recover a password', (tester) async {
+      useTallPhone(tester);
+      await tester.pumpWidget(host(const SignInScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Sign up'), findsOneWidget);
+      expect(find.text('Forgot password?'), findsOneWidget);
     });
   });
 
@@ -175,6 +180,20 @@ void main() {
       );
       expect(cooling.isLive, isFalse);
       expect(cooling.coolingDaysLeft, greaterThan(0));
+    });
+  });
+
+  group('theming', () {
+    testWidgets('renders in dark mode without falling back to light colours', (tester) async {
+      useTallPhone(tester);
+      await tester.pumpWidget(
+        host(InterventionScreen(session: DemoData.scamSession()), mode: ThemeMode.dark),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(InterventionScreen));
+      expect(Theme.of(context).brightness, Brightness.dark);
+      expect(find.text('£3,000.00'), findsOneWidget);
     });
   });
 }

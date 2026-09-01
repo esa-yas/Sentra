@@ -5,13 +5,12 @@ import '../theme/tokens.dart';
 
 /// Formats money the way a person reads it, not the way a ledger stores it.
 String formatMoney(double amount, String currency) {
-  final symbols = {'GBP': '£', 'USD': r'$', 'EUR': '€'};
+  const symbols = {'GBP': '£', 'USD': r'$', 'EUR': '€'};
   final symbol = symbols[currency.toUpperCase()] ?? '$currency ';
-  final formatter = NumberFormat('#,##0.00', 'en_GB');
-  return '$symbol${formatter.format(amount)}';
+  return '$symbol${NumberFormat('#,##0.00', 'en_GB').format(amount)}';
 }
 
-/// "Yesterday", "3 days ago" — relative time is easier to place than a date stamp.
+/// Relative time is easier to place at a glance than a date stamp.
 String formatWhen(DateTime at) {
   final diff = DateTime.now().difference(at);
   if (diff.inMinutes < 1) return 'Just now';
@@ -22,50 +21,56 @@ String formatWhen(DateTime at) {
   return DateFormat('d MMM').format(at);
 }
 
-/// First letter of a name, for an avatar. Guards against an empty string.
-String initialOf(String name) =>
-    name.trim().isEmpty ? '?' : name.trim().substring(0, 1).toUpperCase();
+/// Shared email validation, so every form rejects the same things for the same reasons.
+String? validateEmail(String? value) {
+  final v = (value ?? '').trim();
+  if (v.isEmpty) return 'Enter your email address';
+  if (!RegExp(r'^[^@\s]+@[^@\s.]+\.[^@\s]+$').hasMatch(v)) {
+    return 'That doesn’t look like an email address';
+  }
+  return null;
+}
 
-/// The brand lockup.
+/// Says plainly that something isn't wired yet, rather than failing silently on tap.
+void showComingSoon(BuildContext context, String what) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('$what isn’t connected yet.')),
+  );
+}
+
+/// The wordmark, used in app bars.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 30});
   final double size;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF8B6DF2), SentraColors.accent],
-              ),
-              borderRadius: BorderRadius.circular(size * 0.3),
+  Widget build(BuildContext context) {
+    final p = SentraPalette.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color.lerp(p.accent, Colors.white, 0.22)!, p.accent],
             ),
-            alignment: Alignment.center,
-            child: Text(
-              'S',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: size * 0.55,
-              ),
-            ),
+            borderRadius: BorderRadius.circular(size * 0.3),
           ),
-          const SizedBox(width: Gap.sm),
-          const Text(
-            'Sentra',
-            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: SentraColors.ink),
-          ),
-        ],
-      );
+          child: Icon(Icons.shield_rounded, size: size * 0.56, color: Colors.white),
+        ),
+        const SizedBox(width: Gap.sm),
+        Text('Sentra',
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: p.ink)),
+      ],
+    );
+  }
 }
 
-/// A plain surface panel. Most screens are a column of these.
+/// A surface panel. Most screens are a column of these.
 class SentraCard extends StatelessWidget {
   const SentraCard({
     super.key,
@@ -84,38 +89,40 @@ class SentraCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = SentraPalette.of(context);
     final content = Container(
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? SentraColors.card,
+        color: color ?? p.surface,
         borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: borderColor ?? SentraColors.line),
+        border: Border.all(color: borderColor ?? p.line),
       ),
       child: child,
     );
     if (onTap == null) return content;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(Radii.lg),
-      child: content,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        child: content,
+      ),
     );
   }
 }
 
-/// A small uppercase section label.
 class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall,
-      );
+  Widget build(BuildContext context) =>
+      Text(text.toUpperCase(), style: Theme.of(context).textTheme.labelSmall);
 }
 
-/// Risk severity, carried by colour *and* an icon *and* a word — never colour alone.
+/// Risk severity. Carried by colour *and* an icon *and* a word — never colour alone, so it
+/// survives colour-blindness and a phone screen in direct sun.
 enum Severity { safe, caution, stop, neutral }
 
 class SeverityStyle {
@@ -125,19 +132,19 @@ class SeverityStyle {
   final Color line;
   final IconData icon;
 
-  static SeverityStyle of(Severity severity) => switch (severity) {
-        Severity.stop => const SeverityStyle(
-            SentraColors.stop, SentraColors.stopBg, SentraColors.stopLine, Icons.gpp_maybe_rounded),
-        Severity.caution => const SeverityStyle(
-            SentraColors.warn, SentraColors.warnBg, SentraColors.warnLine, Icons.error_outline_rounded),
-        Severity.safe => const SeverityStyle(
-            SentraColors.safe, SentraColors.safeBg, SentraColors.safeLine, Icons.verified_rounded),
-        Severity.neutral => const SeverityStyle(
-            SentraColors.accentInk, SentraColors.accentSoft, SentraColors.accentSoft, Icons.info_outline_rounded),
-      };
+  static SeverityStyle of(BuildContext context, Severity severity) {
+    final p = SentraPalette.of(context);
+    return switch (severity) {
+      Severity.stop => SeverityStyle(p.stop, p.stopBg, p.stopLine, Icons.gpp_maybe_rounded),
+      Severity.caution =>
+        SeverityStyle(p.warn, p.warnBg, p.warnLine, Icons.error_outline_rounded),
+      Severity.safe => SeverityStyle(p.safe, p.safeBg, p.safeLine, Icons.verified_rounded),
+      Severity.neutral =>
+        SeverityStyle(p.accentInk, p.accentSoft, p.accentSoft, Icons.info_outline_rounded),
+    };
+  }
 }
 
-/// A status pill: icon + word, so meaning survives without colour.
 class StatusPill extends StatelessWidget {
   const StatusPill({super.key, required this.label, required this.severity, this.icon});
 
@@ -147,25 +154,23 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = SeverityStyle.of(severity);
+    final s = SeverityStyle.of(context, severity);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: 7),
       decoration: BoxDecoration(
-        color: style.bg,
+        color: s.bg,
         borderRadius: BorderRadius.circular(Radii.pill),
-        border: Border.all(color: style.line),
+        border: Border.all(color: s.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon ?? style.icon, size: 15, color: style.fg),
+          Icon(icon ?? s.icon, size: 15, color: s.fg),
           const SizedBox(width: 6),
           Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: style.fg, fontWeight: FontWeight.w700, fontSize: 12.5),
-            ),
+            child: Text(label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: s.fg, fontWeight: FontWeight.w700, fontSize: 12.5)),
           ),
         ],
       ),
@@ -173,9 +178,8 @@ class StatusPill extends StatelessWidget {
   }
 }
 
-/// A tinted square holding an icon — used in every list row.
 class IconTile extends StatelessWidget {
-  const IconTile({super.key, required this.icon, required this.severity, this.size = 40});
+  const IconTile({super.key, required this.icon, required this.severity, this.size = 42});
 
   final IconData icon;
   final Severity severity;
@@ -183,17 +187,16 @@ class IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = SeverityStyle.of(severity);
+    final s = SeverityStyle.of(context, severity);
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: style.bg, borderRadius: BorderRadius.circular(Radii.md)),
-      child: Icon(icon, color: style.fg, size: size * 0.5),
+      decoration: BoxDecoration(color: s.bg, borderRadius: BorderRadius.circular(Radii.md)),
+      child: Icon(icon, color: s.fg, size: size * 0.5),
     );
   }
 }
 
-/// An inline message block.
 class Notice extends StatelessWidget {
   const Notice({super.key, required this.severity, required this.child, this.title});
 
@@ -203,14 +206,14 @@ class Notice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = SeverityStyle.of(severity);
+    final s = SeverityStyle.of(context, severity);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(Gap.lg),
       decoration: BoxDecoration(
-        color: style.bg,
+        color: s.bg,
         borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: style.line),
+        border: Border.all(color: s.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,20 +221,19 @@ class Notice extends StatelessWidget {
           if (title != null) ...[
             Row(
               children: [
-                Icon(style.icon, size: 17, color: style.fg),
+                Icon(s.icon, size: 18, color: s.fg),
                 const SizedBox(width: 7),
                 Expanded(
-                  child: Text(
-                    title!,
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: style.fg),
-                  ),
+                  child: Text(title!,
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: s.fg)),
                 ),
               ],
             ),
             const VGap.sm(),
           ],
           DefaultTextStyle.merge(
-            style: TextStyle(fontSize: 13.5, height: 1.45, color: style.fg),
+            style: TextStyle(fontSize: 14, height: 1.45, color: s.fg),
             child: child,
           ),
         ],
@@ -250,18 +252,16 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: Gap.lg),
+        padding: const EdgeInsets.symmetric(vertical: Gap.huge, horizontal: Gap.lg),
         child: Column(
           children: [
-            IconTile(icon: icon, severity: Severity.neutral, size: 56),
+            IconTile(icon: icon, severity: Severity.neutral, size: 60),
             const VGap.lg(),
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const VGap.sm(),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(body,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       );

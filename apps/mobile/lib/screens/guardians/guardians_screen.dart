@@ -2,170 +2,131 @@ import 'package:flutter/material.dart';
 
 import '../../app.dart';
 import '../../models/models.dart';
-import '../../services/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/common.dart';
 import 'add_guardian_screen.dart';
 import 'approval_screen.dart';
 
-/// Guardians, from both sides.
-///
-/// The same app serves the person being protected and the person protecting them, so this screen
-/// shows both lists: who can help you, and who you help. A guardian is not a different build —
-/// just a Sentra user with a decision waiting.
+/// Guardians, in both directions: people who protect you, and people you protect.
 class GuardiansScreen extends StatelessWidget {
   const GuardiansScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final text = Theme.of(context).textTheme;
     final request = state.pendingRequest;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Guardians'),
-        actions: [
-          IconButton(
-            tooltip: 'Add a guardian',
+      appBar: AppBar(title: const Text('Guardians')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xxl),
+        children: [
+          if (request != null) ...[
+            SentraCard(
+              color: SentraPalette.of(context).stopBg,
+              borderColor: SentraPalette.of(context).stopLine,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => ApprovalScreen(request: request)),
+              ),
+              child: Row(
+                children: [
+                  const IconTile(icon: Icons.gpp_maybe_rounded, severity: Severity.stop),
+                  const SizedBox(width: Gap.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${request.forPersonName} needs you',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${formatMoney(request.amount, request.currency)} held — waiting on your check',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+            ),
+            const VGap.xl(),
+          ],
+
+          const SectionLabel('Protecting you'),
+          const VGap.md(),
+          if (state.guardians.isEmpty)
+            const EmptyState(
+              icon: Icons.person_add_alt_1_rounded,
+              title: 'No guardians yet',
+              body: 'Name someone you trust. If a payment is ever held, they can check with you '
+                  'and clear it in seconds.',
+            )
+          else
+            ...state.guardians.map(
+              (g) => Padding(
+                padding: const EdgeInsets.only(bottom: Gap.md),
+                child: _GuardianCard(guardian: g, onRemove: () => state.removeGuardian(g.id)),
+              ),
+            ),
+
+          const VGap.md(),
+          OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const AddGuardianScreen()),
             ),
-            icon: const Icon(Icons.person_add_alt_rounded),
+            icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
+            label: const Text('Add a guardian'),
           ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.xxl),
-          children: [
-            if (request != null) ...[
-              SentraCard(
-                color: SentraColors.stopBg,
-                borderColor: SentraColors.stopLine,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => ApprovalScreen(request: request)),
-                ),
-                child: Row(
-                  children: [
-                    const IconTile(icon: Icons.shield_rounded, severity: Severity.stop, size: 44),
-                    const SizedBox(width: Gap.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Waiting on you',
-                              style: text.titleMedium?.copyWith(color: SentraColors.stop)),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${request.forPersonName} — ${formatMoney(request.amount, request.currency)} held',
-                            style: text.bodySmall?.copyWith(color: const Color(0xFF8A4A44)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded, color: SentraColors.stop),
-                  ],
-                ),
-              ),
-              const VGap.lg(),
-            ],
 
-            const SectionLabel('People who can help you'),
-            const VGap.sm(),
-            Text(
-              'They can clear a held payment after speaking with you.',
-              style: text.bodySmall,
-            ),
+          if (state.protecting.isNotEmpty) ...[
+            const VGap.xl(),
+            const SectionLabel('You’re protecting'),
             const VGap.md(),
-            if (state.guardians.isEmpty)
-              SentraCard(
-                child: Column(
-                  children: [
-                    const EmptyState(
-                      icon: Icons.person_add_alt_rounded,
-                      title: 'No guardians yet',
-                      body: 'Add someone you trust — a family member who can confirm a payment '
-                          'is really you.',
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const AddGuardianScreen()),
-                      ),
-                      child: const Text('Add a guardian'),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...state.guardians.map((g) => Padding(
-                    padding: const EdgeInsets.only(bottom: Gap.md),
-                    child: _GuardianCard(guardian: g),
-                  )),
-
-            if (state.protecting.isNotEmpty) ...[
-              const VGap.lg(),
-              const SectionLabel('People you help'),
-              const VGap.sm(),
-              Text(
-                'You may be asked to confirm a payment for them.',
-                style: text.bodySmall,
+            ...state.protecting.map(
+              (g) => Padding(
+                padding: const EdgeInsets.only(bottom: Gap.md),
+                child: _GuardianCard(guardian: g),
               ),
-              const VGap.md(),
-              ...state.protecting.map((g) => Padding(
-                    padding: const EdgeInsets.only(bottom: Gap.md),
-                    child: _GuardianCard(guardian: g),
-                  )),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
 class _GuardianCard extends StatelessWidget {
-  const _GuardianCard({required this.guardian});
-  final Guardian guardian;
+  const _GuardianCard({required this.guardian, this.onRemove});
 
-  (String, Severity) get _status {
-    if (guardian.status == GuardianStatus.active) return ('Active', Severity.safe);
-    if (guardian.status == GuardianStatus.cooling) {
-      final days = guardian.coolingDaysLeft ?? 0;
-      return ('Starts in $days day${days == 1 ? '' : 's'}', Severity.caution);
-    }
-    if (guardian.status == GuardianStatus.pending) return ('Waiting for them', Severity.caution);
-    return ('Disconnected', Severity.neutral);
-  }
+  final Guardian guardian;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final p = SentraPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final state = AppScope.of(context);
-    final (label, severity) = _status;
+    final cooling = guardian.coolingDaysLeft;
+
+    final (label, severity) = switch (guardian.status) {
+      GuardianStatus.active => ('Active', Severity.safe),
+      GuardianStatus.cooling => ('Starts in ${cooling ?? 0}d', Severity.caution),
+      GuardianStatus.pending => ('Waiting for them', Severity.caution),
+      GuardianStatus.revoked => ('Disconnected', Severity.neutral),
+    };
 
     return SentraCard(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  color: SentraColors.accentSoft,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: p.accentSoft,
                 child: Text(
-                  initialOf(guardian.name),
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                    color: SentraColors.accentInk,
-                  ),
+                  guardian.name.characters.first.toUpperCase(),
+                  style: TextStyle(
+                      color: p.accentInk, fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
               const SizedBox(width: Gap.md),
@@ -179,29 +140,23 @@ class _GuardianCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (guardian.direction == GuardianDirection.protecting)
+              if (onRemove != null)
                 IconButton(
+                  onPressed: () => _confirmRemove(context),
+                  icon: Icon(Icons.close_rounded, color: p.faint),
                   tooltip: 'Disconnect',
-                  onPressed: () => _confirmRemove(context, state),
-                  icon: const Icon(Icons.link_off_rounded, color: SentraColors.faint),
                 ),
             ],
           ),
           if (guardian.status == GuardianStatus.cooling) ...[
             const VGap.md(),
-            const Notice(
+            Notice(
               severity: Severity.caution,
               child: Text(
-                'There’s a short waiting period before a new guardian can approve anything. '
-                'If you didn’t expect this, disconnect them now.',
+                'There’s a short wait before a new guardian can approve anything. Either of you '
+                'can stop it before then.',
+                style: text.bodySmall?.copyWith(color: p.warn),
               ),
-            ),
-          ],
-          if (guardian.status == GuardianStatus.pending) ...[
-            const VGap.md(),
-            const Notice(
-              severity: Severity.caution,
-              child: Text('They need to accept on their own phone, and have a bank connected.'),
             ),
           ],
         ],
@@ -209,30 +164,26 @@ class _GuardianCard extends StatelessWidget {
     );
   }
 
-  void _confirmRemove(BuildContext context, AppState state) {
+  void _confirmRemove(BuildContext context) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Disconnect this guardian?'),
-        content: Text(
-          '${guardian.name} will no longer be able to help clear a held payment. '
-          'Held payments will go to your bank instead. You can do this at any time.',
+        title: Text('Disconnect ${guardian.name}?'),
+        content: const Text(
+          'They will no longer be asked to check held payments. You can add them again later.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Keep them'),
+            child: const Text('Keep'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: SentraColors.stop,
-              minimumSize: const Size(100, 44),
-            ),
+          TextButton(
             onPressed: () {
-              state.removeGuardian(guardian.id);
               Navigator.of(dialogContext).pop();
+              onRemove?.call();
             },
-            child: const Text('Disconnect'),
+            child: Text('Disconnect',
+                style: TextStyle(color: SentraPalette.of(dialogContext).stop)),
           ),
         ],
       ),

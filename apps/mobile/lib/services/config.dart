@@ -1,13 +1,13 @@
-/// Runtime configuration.
+/// Runtime configuration, supplied at build time.
 ///
-/// `useDemoData` seeds a realistic account so every screen — including an interception and a
-/// guardian approval — can be explored without a bank partner or a running API. It is the
-/// difference between a demo and a dead app, not a stub for missing logic: the same widgets,
-/// models and flows run in both modes.
+/// Run with `--dart-define-from-file=env.json` to point the app at a real Supabase project and
+/// API. Without those values the app still runs end to end on seeded data, which is what keeps
+/// every screen demonstrable without a bank partner.
 class AppConfig {
   const AppConfig._();
 
-  /// Point at a running Sentra API. On a simulator, localhost is the host machine.
+  /// The Sentra API. On a simulator, localhost is the host machine; on a real device this must be
+  /// the Mac's LAN address.
   static const String apiBaseUrl = String.fromEnvironment(
     'SENTRA_API_URL',
     defaultValue: 'http://localhost:3001',
@@ -16,9 +16,14 @@ class AppConfig {
   static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
-  /// Whether Supabase credentials were supplied at build time.
+  /// Where a bank sends the customer back after they approve the connection.
+  static const String bankRedirectUri = String.fromEnvironment(
+    'SENTRA_BANK_REDIRECT',
+    defaultValue: 'sentra://bank-callback',
+  );
+
   static bool get authConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
-  /// Demo mode is on unless an API URL was explicitly provided.
+  /// True when no API was supplied, so the app should use its seeded account.
   static const bool useDemoData = !bool.hasEnvironment('SENTRA_API_URL');
 }

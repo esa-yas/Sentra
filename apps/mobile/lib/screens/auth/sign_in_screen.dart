@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../app.dart';
+import '../../services/auth_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/auth_shell.dart';
 import '../../widgets/common.dart';
+import 'forgot_password_screen.dart';
+import 'sign_up_screen.dart';
 
-/// Sign in / create an account.
+/// Sign in.
 ///
-/// One screen with a toggle rather than two: the difference between signing in and signing up is
-/// one field, and a person who taps the wrong one should not have to navigate anywhere.
+/// Deliberately generic on failure: the form says "that email or password is incorrect" rather
+/// than which of the two was wrong, so it can't be used to discover whether an address has an
+/// account here.
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -17,17 +21,15 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInScreenState extends State<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-
-  bool _creating = true;
-  bool _busy = false;
   bool _obscure = true;
+  bool _remember = true;
+  bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
-    _name.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -35,113 +37,156 @@ class _SignInScreenState extends State<SignInScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _busy = true);
-    await AppScope.of(context).signIn(email: _email.text.trim(), name: _name.text.trim());
-    if (mounted) setState(() => _busy = false);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AuthSession.signIn(
+        email: _email.text,
+        password: _password.text,
+        remember: _remember,
+      );
+      // The root listens to the session and swaps the screen itself.
+    } on AuthFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(Gap.xl, Gap.xl, Gap.xl, Gap.xxl),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const BrandMark(size: 34),
-                const VGap(Gap.xxl),
-                Text(
-                  _creating ? 'Keep your money safe' : 'Welcome back',
-                  style: text.displaySmall,
-                ),
-                const VGap.sm(),
-                Text(
-                  _creating
-                      ? 'Sentra checks your payments for signs of a scam, and lets someone you '
-                          'trust help when something looks wrong.'
-                      : 'Sign in to see your protection and any approvals waiting for you.',
-                  style: text.bodyLarge,
-                ),
-                const VGap(Gap.xxl),
-                if (_creating) ...[
-                  TextFormField(
-                    controller: _name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Your name',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
-                    ),
-                    validator: (v) =>
-                        (v == null || v.trim().length < 2) ? 'Please enter your name' : null,
-                  ),
-                  const VGap.lg(),
-                ],
-                TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.mail_outline_rounded),
-                  ),
-                  validator: (v) => (v == null || !v.contains('@'))
-                      ? 'That email doesn’t look right'
-                      : null,
-                ),
-                const VGap.lg(),
-                TextFormField(
-                  controller: _password,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(_obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      tooltip: _obscure ? 'Show password' : 'Hide password',
-                    ),
-                  ),
-                  validator: (v) => (v == null || v.length < 8)
-                      ? 'Use at least 8 characters'
-                      : null,
-                ),
-                const VGap(Gap.xl),
-                FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  child: _busy
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
-                        )
-                      : Text(_creating ? 'Create account' : 'Sign in'),
-                ),
-                const VGap.lg(),
-                TextButton(
-                  onPressed: () => setState(() => _creating = !_creating),
-                  child: Text(_creating
-                      ? 'I already have an account'
-                      : 'Create an account instead'),
-                ),
-                const VGap.lg(),
-                const Notice(
-                  severity: Severity.neutral,
-                  child: Text(
-                    'Sentra never sees your account numbers or your money. We look at the shape of '
-                    'a payment — not what is in your account.',
-                  ),
-                ),
-              ],
-            ),
-          ),
+    final p = SentraPalette.of(context);
+    return AuthShell(
+      title: 'Welcome back',
+      subtitle: 'Sign in to keep your payments protected, and to help the people who trust you.',
+      footer: AuthFooterLink(
+        prompt: 'Don’t have an account?',
+        action: 'Sign up',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const SignUpScreen()),
         ),
       ),
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              LabelledField(
+                label: 'Email address',
+                controller: _email,
+                hint: 'you@example.com',
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
+                validator: validateEmail,
+              ),
+              const VGap.lg(),
+              LabelledField(
+                label: 'Password',
+                controller: _password,
+                hint: '••••••••',
+                obscure: _obscure,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                onSubmitted: (_) => _submit(),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Enter your password' : null,
+                suffix: IconButton(
+                  icon: Icon(_obscure
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  tooltip: _obscure ? 'Show password' : 'Hide password',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const VGap.md(),
+        Row(
+          children: [
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: Checkbox(
+                value: _remember,
+                onChanged: (v) => setState(() => _remember = v ?? true),
+              ),
+            ),
+            const SizedBox(width: Gap.sm),
+            // Flexible so the label gives way before the row can overflow.
+            Flexible(
+              child: Text('Keep me signed in',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall),
+            ),
+            const SizedBox(width: Gap.sm),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ForgotPasswordScreen()),
+              ),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Forgot password?'),
+            ),
+          ],
+        ),
+        if (_error != null) ...[
+          const VGap.lg(),
+          Notice(severity: Severity.stop, child: Text(_error!)),
+        ],
+        const VGap.xl(),
+        FilledButton.icon(
+          onPressed: _busy ? null : _submit,
+          icon: _busy
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.2, color: p.onAccent),
+                )
+              : const Icon(Icons.auto_awesome_rounded, size: 19),
+          label: Text(_busy ? 'Signing in…' : 'Sign in'),
+        ),
+        const VGap.xl(),
+        const OrDivider(),
+        const VGap.lg(),
+        Row(
+          children: [
+            SocialButton(
+              label: 'Google',
+              icon: const _GoogleMark(),
+              onTap: () => showComingSoon(context, 'Google sign-in'),
+            ),
+            const SizedBox(width: Gap.md),
+            SocialButton(
+              label: 'Apple',
+              icon: Icon(Icons.apple, size: 22, color: p.ink),
+              onTap: () => showComingSoon(context, 'Apple sign-in'),
+            ),
+          ],
+        ),
+      ],
     );
   }
+}
+
+/// Google's mark, drawn rather than shipped as an asset so it stays crisp in both themes.
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 20,
+        height: 20,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4285F4)),
+        child: const Text('G',
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, height: 1.2)),
+      );
 }

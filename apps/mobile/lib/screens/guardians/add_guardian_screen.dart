@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../app.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/auth_shell.dart';
 import '../../widgets/common.dart';
 
-/// Inviting a guardian.
+/// Naming a guardian.
 ///
-/// The safeguards are the feature, not friction to be minimised. Both people must accept, both
-/// must have a bank connected — which is how we know they are real customers, not an attacker
-/// who installed the app — and a new link waits two to three days before it can approve anything.
-/// That delay is deliberate: it removes the value of a rushed, coerced setup and gives the
-/// customer time to think, while either side can disconnect instantly.
+/// The safeguards are shown as the feature they are, not as fine print: the other person accepts
+/// on their own phone, both sides have a bank connected so we know they're real, and a new link
+/// waits a few days before it can approve anything. That wait is deliberate — it's the window in
+/// which a coerced or rushed addition can be undone.
 class AddGuardianScreen extends StatefulWidget {
   const AddGuardianScreen({super.key});
 
@@ -22,7 +22,7 @@ class _AddGuardianScreenState extends State<AddGuardianScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
-  bool _sending = false;
+  bool _sent = false;
 
   @override
   void dispose() {
@@ -31,161 +31,146 @@ class _AddGuardianScreenState extends State<AddGuardianScreen> {
     super.dispose();
   }
 
-  Future<void> _send() async {
+  void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _sending = true);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
     AppScope.of(context).addGuardian(_name.text.trim());
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invitation sent to ${_name.text.trim()}.')),
-    );
+    setState(() => _sent = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    final p = SentraPalette.of(context);
     final text = Theme.of(context).textTheme;
+
+    if (_sent) {
+      return Scaffold(
+        appBar: AppBar(leading: const CloseButton()),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.xxl),
+          children: [
+            const IconTile(
+                icon: Icons.mark_email_read_rounded, severity: Severity.safe, size: 64),
+            const VGap.xl(),
+            Text('Invitation sent', style: text.headlineSmall),
+            const VGap.md(),
+            Text(
+              'We’ve asked ${_name.text.trim()} to accept. Nothing changes until they do — and '
+              'then there’s a short wait before they can approve a payment.',
+              style: text.bodyLarge,
+            ),
+            const VGap.xl(),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add a guardian')),
-      body: SafeArea(
-        top: false,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.xxl),
-            children: [
-              Text(
-                'Someone you trust to confirm a payment is really you, when we’ve held one.',
-                style: text.bodyLarge,
-              ),
-              const VGap(Gap.xl),
-              TextFormField(
-                controller: _name,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Their name',
-                  hintText: 'Sara (daughter)',
-                  prefixIcon: Icon(Icons.person_outline_rounded),
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().length < 2) ? 'Please enter their name' : null,
-              ),
-              const VGap.lg(),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Their email',
-                  prefixIcon: Icon(Icons.mail_outline_rounded),
-                ),
-                validator: (v) =>
-                    (v == null || !v.contains('@')) ? 'That email doesn’t look right' : null,
-              ),
-              const VGap(Gap.xl),
-              const SectionLabel('How this works'),
-              const VGap.md(),
-              const SentraCard(
-                child: Column(
-                  children: [
-                    _Step(
-                      number: '1',
-                      title: 'They accept, on their own phone',
-                      body: 'You can’t accept for them. Nothing happens until they do.',
-                    ),
-                    _Step(
-                      number: '2',
-                      title: 'You both have a bank connected',
-                      body: 'That’s how we know you’re both real customers.',
-                    ),
-                    _Step(
-                      number: '3',
-                      title: 'A 2–3 day wait before it turns on',
-                      body: 'Time to think. If anything feels wrong, either of you can stop it.',
-                      last: true,
-                    ),
-                  ],
-                ),
-              ),
-              const VGap.lg(),
-              const Notice(
-                severity: Severity.neutral,
-                child: Text(
-                  'You can disconnect a guardian at any time, instantly — and they’ll never see '
-                  'your balance or your other payments.',
-                ),
-              ),
-              const VGap(Gap.xl),
-              FilledButton(
-                onPressed: _sending ? null : _send,
-                child: _sending
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
-                      )
-                    : const Text('Send invitation'),
-              ),
-            ],
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xxl),
+        children: [
+          Text(
+            'Someone you trust to check with you when a payment looks wrong — a son, a daughter, '
+            'a close friend.',
+            style: text.bodyLarge,
           ),
-        ),
+          const VGap.xl(),
+          Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                LabelledField(
+                  label: 'Their name',
+                  controller: _name,
+                  hint: 'Sara',
+                  textInputAction: TextInputAction.next,
+                  validator: (v) =>
+                      (v == null || v.trim().length < 2) ? 'Give them a name' : null,
+                ),
+                const VGap.lg(),
+                LabelledField(
+                  label: 'Their email',
+                  controller: _email,
+                  hint: 'sara@example.com',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  validator: validateEmail,
+                ),
+              ],
+            ),
+          ),
+          const VGap.xl(),
+          const SectionLabel('How it works'),
+          const VGap.md(),
+          SentraCard(
+            child: Column(
+              children: [
+                const _Step(
+                  number: '1',
+                  text: 'They accept on their own phone. Until then, nothing changes.',
+                ),
+                Divider(color: p.line, height: Gap.xl),
+                const _Step(
+                  number: '2',
+                  text: 'You both have a bank connected — that’s how we know you’re both real.',
+                ),
+                Divider(color: p.line, height: Gap.xl),
+                const _Step(
+                  number: '3',
+                  text: 'A short wait before the link goes live. Either of you can stop it, '
+                      'and you can disconnect at any time.',
+                ),
+              ],
+            ),
+          ),
+          const VGap.lg(),
+          const Notice(
+            severity: Severity.caution,
+            title: 'They’re taking on a responsibility',
+            child: Text(
+              'Approving a held payment tells your bank it’s safe to send. If a payment they '
+              'approve turns out to be a scam, the case can be investigated.',
+            ),
+          ),
+          const VGap.xl(),
+          FilledButton.icon(
+            onPressed: _submit,
+            icon: const Icon(Icons.send_rounded, size: 19),
+            label: const Text('Send invitation'),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _Step extends StatelessWidget {
-  const _Step({
-    required this.number,
-    required this.title,
-    required this.body,
-    this.last = false,
-  });
-
+  const _Step({required this.number, required this.text});
   final String number;
-  final String title;
-  final String body;
-  final bool last;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Padding(
-      padding: EdgeInsets.only(bottom: last ? 0 : Gap.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: const BoxDecoration(
-              color: SentraColors.accentSoft,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              number,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                color: SentraColors.accentInk,
-              ),
-            ),
-          ),
-          const SizedBox(width: Gap.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: text.titleMedium?.copyWith(fontSize: 15)),
-                const SizedBox(height: 2),
-                Text(body, style: text.bodySmall),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final p = SentraPalette.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: p.accentSoft),
+          child: Text(number,
+              style: TextStyle(
+                  color: p.accentInk, fontWeight: FontWeight.w800, fontSize: 13)),
+        ),
+        const SizedBox(width: Gap.md),
+        Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
+      ],
     );
   }
 }

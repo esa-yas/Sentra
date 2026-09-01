@@ -7,7 +7,7 @@ import '../guardians/guardians_screen.dart';
 import '../profile/profile_screen.dart';
 import 'home_screen.dart';
 
-/// The signed-in app: four destinations, and a badge when a guardian decision is waiting.
+/// The signed-in frame: four destinations, with the guardian tab badged when someone is waiting.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -20,6 +20,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final p = SentraPalette.of(context);
     final state = AppScope.of(context);
     final waiting = state.pendingRequest != null;
 
@@ -33,44 +34,53 @@ class _HomeShellState extends State<HomeShell> {
           ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        backgroundColor: SentraColors.card,
-        indicatorColor: SentraColors.accentSoft,
-        surfaceTintColor: Colors.transparent,
-        height: 68,
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.shield_outlined),
-            selectedIcon: Icon(Icons.shield_rounded, color: SentraColors.accentInk),
-            label: 'Home',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long_rounded, color: SentraColors.accentInk),
-            label: 'Activity',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: waiting,
-              backgroundColor: SentraColors.stop,
-              child: const Icon(Icons.people_outline_rounded),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: p.surface,
+          border: Border(top: BorderSide(color: p.line)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBarTheme(
+            data: NavigationBarThemeData(
+              backgroundColor: Colors.transparent,
+              indicatorColor: p.accentSoft,
+              surfaceTintColor: Colors.transparent,
+              labelTextStyle: WidgetStatePropertyAll(
+                TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: p.muted),
+              ),
             ),
-            selectedIcon: Badge(
-              isLabelVisible: waiting,
-              backgroundColor: SentraColors.stop,
-              child: const Icon(Icons.people_rounded, color: SentraColors.accentInk),
+            child: NavigationBar(
+              selectedIndex: _index,
+              height: 66,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              destinations: [
+                _dest(p, Icons.shield_outlined, Icons.shield_rounded, 'Home', false),
+                _dest(p, Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Activity', false),
+                _dest(p, Icons.people_alt_outlined, Icons.people_alt_rounded, 'Guardians', waiting),
+                _dest(p, Icons.person_outline_rounded, Icons.person_rounded, 'You', false),
+              ],
             ),
-            label: 'Guardians',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded, color: SentraColors.accentInk),
-            label: 'You',
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  NavigationDestination _dest(
+    SentraPalette p,
+    IconData icon,
+    IconData selected,
+    String label,
+    bool badge,
+  ) {
+    Widget wrap(IconData i, Color c) => badge
+        ? Badge(backgroundColor: p.stop, smallSize: 8, child: Icon(i, color: c))
+        : Icon(i, color: c);
+    return NavigationDestination(
+      icon: wrap(icon, p.muted),
+      selectedIcon: wrap(selected, p.accentInk),
+      label: label,
     );
   }
 }

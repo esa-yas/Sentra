@@ -8,18 +8,13 @@ import '../../widgets/common.dart';
 
 /// The screen that saves the money.
 ///
-/// Three things make it work, and all three are deliberate:
-///   * it names the specific thing happening now ("a suspicious call is happening right now"),
-///     because generic warnings get dismissed;
-///   * it asks a question, because scammers coach victims with a script and answering for
-///     yourself breaks it;
-///   * on a hold it offers no "send anyway" — only the safer choice — while never shaming the
-///     person, because people abandon a scam far more readily when stopping feels sensible
-///     rather than like an admission they were fooled.
-///
-/// Every word here comes from the engine, so it can be improved without shipping a new build.
+/// It names the specific thing happening right now, asks a question or two — a scammer's script
+/// breaks the moment the victim has to answer for themselves — and on a hold offers no way to
+/// send anyway. The safer choice is always one tap, and the copy never shames anyone: people
+/// abandon a scam far more readily when stopping feels sensible rather than like an admission.
 class InterventionScreen extends StatefulWidget {
   const InterventionScreen({super.key, required this.session});
+
   final ProtectionSession session;
 
   @override
@@ -29,23 +24,23 @@ class InterventionScreen extends StatefulWidget {
 class _InterventionScreenState extends State<InterventionScreen> {
   late ProtectionSession _session = widget.session;
   final Map<String, String> _answers = {};
-  bool _submitting = false;
+  bool _answered = false;
 
   bool get _allAnswered =>
-      _session.questions.isNotEmpty && _answers.length == _session.questions.length;
+      _session.questions.every((q) => _answers.containsKey(q.id));
 
-  Future<void> _submitAnswers() async {
-    setState(() => _submitting = true);
-    await Future<void>.delayed(const Duration(milliseconds: 550));
-    if (!mounted) return;
+  Severity get _severity => switch (_session.display.tone) {
+        DisplayTone.stop => Severity.stop,
+        DisplayTone.caution => Severity.caution,
+        DisplayTone.info => Severity.safe,
+      };
+
+  void _continue() {
+    // In a wired build the answers go to the engine, which returns revised copy. Demo mode shows
+    // the same shape of response so the flow reads identically.
     setState(() {
-      // In a live build this is `api.submitAnswers`; the engine decides what an answer means.
-      _session = _session.copyWith(
-        verdict: ProtectionVerdict.hold,
-        display: DemoData.afterAnswers(),
-        questions: const [],
-      );
-      _submitting = false;
+      _answered = true;
+      _session = _session.copyWith(display: DemoData.afterAnswers(), questions: const []);
     });
   }
 
@@ -56,43 +51,36 @@ class _InterventionScreenState extends State<InterventionScreen> {
       SnackBar(
         content: Text(cancelled
             ? 'Payment cancelled. Your money stayed in your account.'
-            : 'Payment sent.'),
+            : 'Sent. We’ve logged that you were warned.'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final display = _session.display;
+    final p = SentraPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final severity = switch (display.tone) {
-      DisplayTone.stop => Severity.stop,
-      DisplayTone.caution => Severity.caution,
-      DisplayTone.info => Severity.safe,
-    };
-    final style = SeverityStyle.of(severity);
+    final display = _session.display;
+    final s = SeverityStyle.of(context, _severity);
 
     return Scaffold(
-      backgroundColor: SentraColors.ground,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [style.bg, SentraColors.ground],
+            colors: [s.bg, p.ground],
             stops: const [0, 0.42],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-              // Deliberately no back arrow: leaving is a decision, made with the buttons below.
+              // No back arrow on purpose: leaving is a decision, made with the buttons below.
               Padding(
                 padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, 0),
                 child: Row(
                   children: [
-                    // Flexible so a longer label (or a larger accessibility text size) shrinks
-                    // rather than overflowing the row.
                     Flexible(
                       child: StatusPill(
                         label: switch (display.tone) {
@@ -100,7 +88,7 @@ class _InterventionScreenState extends State<InterventionScreen> {
                           DisplayTone.caution => 'Please check',
                           DisplayTone.info => 'Checked',
                         },
-                        severity: severity,
+                        severity: _severity,
                       ),
                     ),
                     const SizedBox(width: Gap.sm),
@@ -114,228 +102,162 @@ class _InterventionScreenState extends State<InterventionScreen> {
                   padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.lg),
                   children: [
                     Text('You’re about to send', style: text.labelSmall),
-                    const SizedBox(height: 6),
-                    Text(
-                      formatMoney(_session.amount, _session.currency),
-                      style: text.displaySmall?.copyWith(fontSize: 38),
-                    ),
+                    const VGap.xs(),
+                    Text(formatMoney(_session.amount, _session.currency),
+                        style: text.displaySmall?.copyWith(fontSize: 40)),
                     if (_session.payeeLabel != null) ...[
                       const SizedBox(height: 2),
-                      Text('to ${_session.payeeLabel}', style: text.bodyLarge),
+                      Text('to ${_session.payeeLabel}', style: text.bodyMedium),
                     ],
-                    const VGap(Gap.xl),
-                    Text(display.headline, style: text.headlineSmall?.copyWith(color: style.fg)),
-                    const VGap.sm(),
+                    const VGap.xl(),
+                    Text(display.headline,
+                        style: text.headlineSmall?.copyWith(color: s.fg)),
+                    const VGap.md(),
                     Text(display.body, style: text.bodyLarge),
+
                     if (display.reasons.isNotEmpty) ...[
-                      const VGap.lg(),
+                      const VGap.xl(),
                       SentraCard(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: Gap.lg, vertical: Gap.xs),
+                        padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
                         child: Column(
                           children: [
-                            for (var i = 0; i < display.reasons.length; i++)
-                              _ReasonRow(
-                                reason: display.reasons[i],
-                                color: style.fg,
-                                showDivider: i > 0,
+                            for (var i = 0; i < display.reasons.length; i++) ...[
+                              if (i > 0) Divider(color: p.line, height: 1),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: Gap.md),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      margin: const EdgeInsets.only(top: 7, right: Gap.md),
+                                      decoration:
+                                          BoxDecoration(color: s.fg, shape: BoxShape.circle),
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(display.reasons[i].title,
+                                              style: text.titleMedium
+                                                  ?.copyWith(fontSize: 15.5)),
+                                          const SizedBox(height: 3),
+                                          Text(display.reasons[i].detail,
+                                              style: text.bodySmall),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                            ],
                           ],
                         ),
                       ),
                     ],
+
                     if (_session.questions.isNotEmpty) ...[
-                      const VGap(Gap.xl),
+                      const VGap.xl(),
                       const SectionLabel('A couple of quick questions'),
                       const VGap.md(),
-                      for (final question in _session.questions)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: Gap.md),
-                          child: _QuestionCard(
-                            question: question,
-                            selected: _answers[question.id],
-                            onSelect: (optionId) =>
-                                setState(() => _answers[question.id] = optionId),
+                      for (final q in _session.questions) ...[
+                        SentraCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(q.prompt, style: text.titleMedium),
+                              if (q.helper != null) ...[
+                                const SizedBox(height: 4),
+                                Text(q.helper!, style: text.bodySmall),
+                              ],
+                              const VGap.md(),
+                              Wrap(
+                                spacing: Gap.sm,
+                                runSpacing: Gap.sm,
+                                children: q.options.map((o) {
+                                  final selected = _answers[q.id] == o.id;
+                                  return ChoiceChip(
+                                    label: Text(o.label),
+                                    selected: selected,
+                                    onSelected: (_) =>
+                                        setState(() => _answers[q.id] = o.id),
+                                    showCheckmark: false,
+                                    labelStyle: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14.5,
+                                      color: selected ? p.accentInk : p.inkSoft,
+                                    ),
+                                    backgroundColor: p.surface,
+                                    selectedColor: p.accentSoft,
+                                    side: BorderSide(
+                                        color: selected ? p.accent : p.lineStrong,
+                                        width: selected ? 1.6 : 1.2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: Gap.md, vertical: Gap.md),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
                           ),
                         ),
+                        const VGap.md(),
+                      ],
                     ],
-                    const VGap.lg(),
-                    Text(
-                      display.footnote,
-                      textAlign: TextAlign.center,
-                      style: text.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
 
-              // Actions sit in a fixed footer so the decision is always reachable.
-              Container(
-                padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.lg),
-                decoration: const BoxDecoration(
-                  color: SentraColors.card,
-                  border: Border(top: BorderSide(color: SentraColors.line)),
-                ),
-                child: _session.questions.isNotEmpty
-                    ? FilledButton(
-                        onPressed: _allAnswered && !_submitting ? _submitAnswers : null,
-                        child: _submitting
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2.4, color: Colors.white),
-                              )
-                            : const Text('Continue'),
-                      )
-                    : Column(
-                        children: [
-                          FilledButton(
-                            style: FilledButton.styleFrom(backgroundColor: style.fg),
-                            onPressed: () => _finish(cancelled: true),
-                            child: Text(display.cancelLabel),
-                          ),
-                          if (display.continueLabel != null) ...[
-                            const VGap.md(),
-                            OutlinedButton(
-                              onPressed: () => _finish(cancelled: false),
-                              child: Text(display.continueLabel!),
-                            ),
-                          ],
-                        ],
+                    if (_answered) ...[
+                      const VGap.md(),
+                      Notice(
+                        severity: Severity.neutral,
+                        child: Text(display.footnote),
                       ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReasonRow extends StatelessWidget {
-  const _ReasonRow({required this.reason, required this.color, required this.showDivider});
-
-  final DisplayReason reason;
-  final Color color;
-  final bool showDivider;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Column(
-      children: [
-        if (showDivider) const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Gap.md),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Icon(Icons.circle, size: 8, color: color),
-              ),
-              const SizedBox(width: Gap.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(reason.title,
-                        style: text.titleMedium?.copyWith(fontSize: 15.5)),
-                    const SizedBox(height: 3),
-                    Text(reason.detail, style: text.bodySmall),
+                    ],
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
-class _QuestionCard extends StatelessWidget {
-  const _QuestionCard({
-    required this.question,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final PollQuestion question;
-  final String? selected;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return SentraCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(question.prompt, style: text.titleMedium),
-          if (question.helper != null) ...[
-            const SizedBox(height: 4),
-            Text(question.helper!, style: text.bodySmall),
-          ],
-          const VGap.md(),
-          Wrap(
-            spacing: Gap.sm,
-            runSpacing: Gap.sm,
-            children: question.options.map((option) {
-              final isSelected = selected == option.id;
-              return _OptionChip(
-                label: option.label,
-                selected: isSelected,
-                onTap: () => onSelect(option.id),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OptionChip extends StatelessWidget {
-  const _OptionChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(Radii.md),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: Gap.xl, vertical: Gap.md),
-          decoration: BoxDecoration(
-            color: selected ? SentraColors.accentSoft : SentraColors.card,
-            borderRadius: BorderRadius.circular(Radii.md),
-            border: Border.all(
-              color: selected ? SentraColors.accent : SentraColors.lineStrong,
-              width: selected ? 2 : 1.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (selected) ...[
-                const Icon(Icons.check_circle_rounded, size: 18, color: SentraColors.accent),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                  color: selected ? SentraColors.accentInk : SentraColors.ink,
+              // The actions sit below the fold's edge, always reachable.
+              Container(
+                padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  border: Border(top: BorderSide(color: p.line)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: _session.questions.isNotEmpty
+                      ? FilledButton(
+                          onPressed: _allAnswered ? _continue : null,
+                          child: const Text('Continue'),
+                        )
+                      : Column(
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () => _finish(cancelled: true),
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: s.fg, foregroundColor: Colors.white),
+                              icon: const Icon(Icons.block_rounded, size: 19),
+                              label: Text(display.cancelLabel),
+                            ),
+                            if (display.continueLabel != null) ...[
+                              const VGap.sm(),
+                              OutlinedButton(
+                                onPressed: () => _finish(cancelled: false),
+                                child: Text(display.continueLabel!),
+                              ),
+                            ],
+                            const VGap.sm(),
+                            Text(display.footnote,
+                                textAlign: TextAlign.center,
+                                style: text.bodySmall?.copyWith(fontSize: 12.5)),
+                          ],
+                        ),
                 ),
               ),
             ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }

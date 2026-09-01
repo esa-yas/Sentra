@@ -1,11 +1,11 @@
 {
-    "name": "sentra_app",
-    "short_name": "sentra_app",
+    "name": "Sentra",
+    "short_name": "Sentra",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F6FB",
+    "theme_color": "#6D4EF0",
+    "description": "Stops scam payments before the money leaves.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
